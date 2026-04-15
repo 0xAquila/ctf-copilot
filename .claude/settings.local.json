@@ -18,7 +18,8 @@
       "Bash(python -c \"import click; print\\(click.__version__\\)\")",
       "Bash(python -c \"import questionary, inspect; print\\(inspect.signature\\(questionary.select\\)\\)\")",
       "Bash(python -m pytest tests/ -x -q)",
-      "Bash(python -c \"from ctf_copilot.core.config import install_hooks; install_hooks\\(\\); print\\('Hooks updated'\\)\")"
+      "Bash(python -c \"from ctf_copilot.core.config import install_hooks; install_hooks\\(\\); print\\('Hooks updated'\\)\")",
+      "Bash(python -c \"from ctf_copilot.parsers.registry import list_parsers; print\\(sorted\\(list_parsers\\(\\)\\)\\)\")"
     ]
   }
 }

@@ -220,7 +220,17 @@ _ctf_wrap() {
     fi
 }
 
-for _t in nmap gobuster ffuf nikto sqlmap hydra feroxbuster wfuzz enum4linux; do
+for _t in \\
+    nmap masscan rustscan \\
+    gobuster ffuf feroxbuster dirb dirsearch wfuzz \\
+    nikto whatweb wpscan droopescan nuclei \\
+    sqlmap \\
+    hydra medusa ncrack \\
+    smbclient smbmap enum4linux enum4linux-ng rpcclient ldapsearch crackmapexec \\
+    evil-winrm \\
+    john hashcat \\
+    snmpwalk onesixtyone showmount \\
+    searchsploit; do
     alias "$_t"="_ctf_wrap $_t"
 done
 unset _t

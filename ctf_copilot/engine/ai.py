@@ -190,13 +190,15 @@ def _call_groq(user_message: str) -> Optional[str]:
     Call Groq's cloud API (OpenAI-compatible endpoint).
     Free tier available at https://console.groq.com/keys
 
-    Returns response text or None on any error.
+    Returns response text or None on any error (error reason printed to stderr).
     """
     import json
+    import ssl
+    import sys
     import urllib.request
     import urllib.error
 
-    api_key = config.groq_api_key
+    api_key = config.groq_api_key.strip()
     if not api_key:
         return None
 
@@ -219,16 +221,44 @@ def _call_groq(user_message: str) -> Optional[str]:
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            text = data["choices"][0]["message"]["content"].strip()
-            return text if text else None
-    except (urllib.error.URLError, urllib.error.HTTPError,
-            OSError, json.JSONDecodeError, KeyError, IndexError):
-        return None
-    except Exception:
-        return None
+    # Use default SSL context (system certs); fall back to unverified if SSL fails
+    for ssl_ctx in (None, ssl._create_unverified_context()):
+        try:
+            kwargs = {"timeout": 30}
+            if ssl_ctx is not None:
+                kwargs["context"] = ssl_ctx
+            with urllib.request.urlopen(req, **kwargs) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                text = data["choices"][0]["message"]["content"].strip()
+                return text if text else None
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:200]
+            except Exception:
+                pass
+            if e.code == 401:
+                print(f"[Copilot] Groq: authentication failed (401) — check your API key in ctf setup", file=sys.stderr)
+            elif e.code == 429:
+                print(f"[Copilot] Groq: rate limited (429) — free tier limit reached, wait a minute", file=sys.stderr)
+            elif e.code == 400:
+                print(f"[Copilot] Groq: bad request (400) — model '{config.groq_model}' may not exist: {body}", file=sys.stderr)
+            else:
+                print(f"[Copilot] Groq: HTTP {e.code} error: {body}", file=sys.stderr)
+            return None
+        except urllib.error.URLError as e:
+            if ssl_ctx is None and "SSL" in str(e.reason).upper():
+                # Retry with unverified SSL context
+                continue
+            print(f"[Copilot] Groq: connection error — {e.reason}", file=sys.stderr)
+            return None
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            print(f"[Copilot] Groq: unexpected response format — {e}", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"[Copilot] Groq: unexpected error — {e}", file=sys.stderr)
+            return None
+    return None
 
 
 # ---------------------------------------------------------------------------
