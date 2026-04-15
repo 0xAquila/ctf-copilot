@@ -187,78 +187,49 @@ def _call_claude(user_message: str) -> Optional[str]:
 
 def _call_groq(user_message: str) -> Optional[str]:
     """
-    Call Groq's cloud API (OpenAI-compatible endpoint).
+    Call Groq's cloud API via the official groq-python SDK.
     Free tier available at https://console.groq.com/keys
 
     Returns response text or None on any error (error reason printed to stderr).
     """
-    import json
-    import ssl
     import sys
-    import urllib.request
-    import urllib.error
+
+    try:
+        from groq import Groq, AuthenticationError, RateLimitError, APIConnectionError
+    except ImportError:
+        print("[Copilot] Groq: SDK not installed — run: pip install groq", file=sys.stderr)
+        return None
 
     api_key = config.groq_api_key.strip()
     if not api_key:
         return None
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    payload = json.dumps({
-        "model": config.groq_model,
-        "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user",   "content": user_message},
-        ],
-        "max_tokens": config.ai_max_tokens,
-        "temperature": 0.3,
-    }).encode("utf-8")
+    try:
+        client = Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model=config.groq_model,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user",   "content": user_message},
+            ],
+            max_tokens=config.ai_max_tokens,
+            temperature=0.3,
+        )
+        text = response.choices[0].message.content or ""
+        return text.strip() if text.strip() else None
 
-    req = urllib.request.Request(
-        url, data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-    # Use default SSL context (system certs); fall back to unverified if SSL fails
-    for ssl_ctx in (None, ssl._create_unverified_context()):
-        try:
-            kwargs = {"timeout": 30}
-            if ssl_ctx is not None:
-                kwargs["context"] = ssl_ctx
-            with urllib.request.urlopen(req, **kwargs) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                text = data["choices"][0]["message"]["content"].strip()
-                return text if text else None
-        except urllib.error.HTTPError as e:
-            body = ""
-            try:
-                body = e.read().decode("utf-8", errors="replace")[:200]
-            except Exception:
-                pass
-            if e.code == 401:
-                print(f"[Copilot] Groq: authentication failed (401) — check your API key in ctf setup", file=sys.stderr)
-            elif e.code == 429:
-                print(f"[Copilot] Groq: rate limited (429) — free tier limit reached, wait a minute", file=sys.stderr)
-            elif e.code == 400:
-                print(f"[Copilot] Groq: bad request (400) — model '{config.groq_model}' may not exist: {body}", file=sys.stderr)
-            else:
-                print(f"[Copilot] Groq: HTTP {e.code} error: {body}", file=sys.stderr)
-            return None
-        except urllib.error.URLError as e:
-            if ssl_ctx is None and "SSL" in str(e.reason).upper():
-                # Retry with unverified SSL context
-                continue
-            print(f"[Copilot] Groq: connection error — {e.reason}", file=sys.stderr)
-            return None
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            print(f"[Copilot] Groq: unexpected response format — {e}", file=sys.stderr)
-            return None
-        except Exception as e:
-            print(f"[Copilot] Groq: unexpected error — {e}", file=sys.stderr)
-            return None
-    return None
+    except AuthenticationError:
+        print("[Copilot] Groq: authentication failed — run 'ctf setup' and re-enter your API key", file=sys.stderr)
+        return None
+    except RateLimitError:
+        print("[Copilot] Groq: rate limited — free tier limit reached, wait a minute", file=sys.stderr)
+        return None
+    except APIConnectionError as e:
+        print(f"[Copilot] Groq: connection error — {e}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[Copilot] Groq: error — {e}", file=sys.stderr)
+        return None
 
 
 # ---------------------------------------------------------------------------
