@@ -55,7 +55,7 @@ PROVIDERS = {
         "name":    "Claude API",
         "vendor":  "Anthropic",
         "backend": "claude",
-        "color":   "cyan",
+        "color":   "#8B5CF6",
         "icon":    "🧠",
         "tier":    "Paid",
         "speed":   "★★★★",
@@ -90,7 +90,7 @@ PROVIDERS = {
         "name":    "Ollama",
         "vendor":  "Local",
         "backend": "ollama",
-        "color":   "yellow",
+        "color":   "#F59E0B",
         "icon":    "🏠",
         "tier":    "Free / offline",
         "speed":   "★★★",
@@ -137,10 +137,10 @@ def _print_banner() -> None:
     _console.print()
     _console.print(Panel(
         Align.center(
-            Text(_BANNER, style="bold cyan") ,
+            Text(_BANNER, style="bold #8B5CF6"),
         ),
-        subtitle="[dim cyan]AI-Assisted Penetration Testing Copilot  •  Setup Wizard[/]",
-        border_style="cyan",
+        subtitle="[dim #6B7280]AI-Assisted Penetration Testing Copilot  •  Setup Wizard[/]",
+        border_style="#8B5CF6",
         box=box.DOUBLE_EDGE,
         padding=(0, 2),
     ))
@@ -396,11 +396,11 @@ def _save_and_confirm(provider: dict, key: str, model: str, extra: dict) -> None
 
     # Write all changed values
     if backend == "offline":
-        save_config_value("offline_mode", "true")
+        save_config_value("offline_mode", True)
         save_config_value("ai_backend", "claude")   # keep claude as default for future
     else:
         save_config_value("ai_backend", backend)
-        save_config_value("offline_mode", "false")
+        save_config_value("offline_mode", False)
 
     if provider["key_field"] and key:
         save_config_value(provider["key_field"], key)
@@ -451,12 +451,16 @@ def _save_and_confirm(provider: dict, key: str, model: str, extra: dict) -> None
 
     _console.print()
     _console.print("  [bold]Next steps:[/]")
-    _console.print("  1. Start a session:  [bold cyan]ctf start <machine-name>[/]")
-    _console.print("  2. Activate logging: [bold cyan]source ~/.ctf_copilot/ctf-init.sh[/]")
+    _console.print("  1. Start a session:  [bold #8B5CF6]ctf start <machine-name>[/]")
+    _console.print("  2. Activate logging: [bold #F59E0B]source ~/.ctf_copilot/ctf-init.sh[/]")
     _console.print("  3. Run your tools normally — hints appear automatically!")
     _console.print()
     _console.print(f"  [dim]Verify config anytime with:[/] [bold]ctf config[/]")
     _console.print()
+
+    # Reload in-process config so changes take effect without restart
+    from ctf_copilot.core.config import reload_config
+    reload_config()
 
 
 # ---------------------------------------------------------------------------
@@ -472,18 +476,18 @@ def run_setup_wizard() -> None:
     cfg_path = Path.home() / ".ctf_copilot" / "config.yaml"
     if cfg_path.exists():
         _console.print(
-            "  [dim]Existing config found at [/][dim cyan]~/.ctf_copilot/config.yaml[/][dim]"
+            "  [dim]Existing config found at ~/.ctf_copilot/config.yaml"
             " — only changed values will be updated.[/]\n"
         )
 
-    _console.print(Rule("[bold cyan]Choose Your AI Provider[/]", style="cyan"))
+    _console.print(Rule("[bold #8B5CF6]Choose Your AI Provider[/]", style="#8B5CF6"))
     _console.print()
     _print_provider_menu()
 
     # --- Provider selection ---
     while True:
         raw = Prompt.ask(
-            "  [bold cyan]Your choice[/] [dim][1-4][/]",
+            "  [bold #8B5CF6]Your choice[/] [dim][1-4][/]",
             console=_console,
         ).strip()
         if raw in PROVIDERS:

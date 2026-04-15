@@ -1,6 +1,7 @@
 <div align="center">
 
 # CTF Copilot
+![Logo](assets/github-hacker.png)
 
 **A real-time AI-assisted penetration testing companion that lives in your terminal.**
 

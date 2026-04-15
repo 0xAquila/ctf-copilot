@@ -77,8 +77,8 @@ def _print_session_panel(session) -> None:
 
     console.print(Panel(
         "\n".join(lines),
-        title="[bold magenta]CTF Copilot — Session[/]",
-        border_style="magenta",
+        title="[bold #8B5CF6]CTF Copilot — Session[/]",
+        border_style="#8B5CF6",
         expand=False,
     ))
 
@@ -90,9 +90,10 @@ def _print_session_panel(session) -> None:
 @click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
-    """CTF Copilot — your AI-assisted penetration testing companion.\n
-    Start a session, run your tools as usual, and get real-time hints.
-    Run [bold]ctf[/] with no arguments to open the interactive menu.
+    """CTF Copilot — AI-assisted penetration testing companion.
+
+    Run 'ctf' with no arguments to open the interactive menu.
+    All commands are accessible from there without typing arguments.
     """
     write_default_config()
     init_db()
@@ -116,7 +117,7 @@ def cli(ctx):
         if missing and not config.offline_mode:
             console.print(
                 f"\n  [dim]No API key configured for [bold]{backend}[/] backend. "
-                "Run [bold magenta]ctf setup[/] to get started.[/]\n"
+                "Run [bold #8B5CF6]ctf setup[/] to get started.[/]\n"
             )
 
 
@@ -220,7 +221,7 @@ def done():
         f"  [bold]ctf writeup[/]                  - AI-enhanced Markdown writeup\n"
         f"  [bold]ctf writeup --no-ai[/]           - Offline writeup (no API cost)\n"
         f"  [bold]ctf writeup --stdout | less[/]   - Preview in terminal",
-        title="[bold magenta]Session Complete[/]",
+        title="[bold #8B5CF6]Session Complete[/]",
         border_style="green",
         expand=False,
     ))
@@ -273,7 +274,7 @@ def status():
         f"  [bold dim]Started:[/]     {(session.started_at or '')[:16].replace('T', ' ')}",
         "",
         "  ──────────────── Intel ─────────────────",
-        f"  Services [yellow]{svc_cnt:>4}[/]    Web findings [magenta]{web_cnt:>4}[/]",
+        f"  Services [yellow]{svc_cnt:>4}[/]    Web findings [#60A5FA]{web_cnt:>4}[/]",
         f"  Commands  [dim]{cmd_cnt:>4}[/]    AI hints      [yellow]{hint_cnt:>4}[/]",
         f"  Creds     [dim]{cred_cnt:>4}[/]    Notes         [blue]{n_cnt:>4}[/]",
         f"  Flags   [bold green]{flag_cnt:>6}[/]",
@@ -284,8 +285,8 @@ def status():
     console.print()
     console.print(Panel(
         "\n".join(lines),
-        title="[bold magenta]Active Session[/]",
-        border_style="magenta",
+        title="[bold #8B5CF6]Active Session[/]",
+        border_style="#8B5CF6",
         box=box.DOUBLE_EDGE,
         expand=False,
     ))
@@ -310,9 +311,9 @@ def sessions_list():
         console.print(Panel(
             "\n  No sessions yet.\n\n"
             "  Start your first session:\n"
-            "  [bold magenta]ctf start <machine-name> --ip <target-ip>[/]\n",
-            title="[bold magenta]CTF Sessions[/]",
-            border_style="magenta",
+            "  [bold #8B5CF6]ctf start <machine-name> --ip <target-ip>[/]\n",
+            title="[bold #8B5CF6]CTF Sessions[/]",
+            border_style="#8B5CF6",
             box=box.ROUNDED,
             expand=False,
         ))
@@ -361,8 +362,8 @@ def sessions_list():
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold magenta",
-        title="[bold magenta]CTF Sessions[/]",
+        header_style="bold #8B5CF6",
+        title="[bold #8B5CF6]CTF Sessions[/]",
         title_justify="left",
         caption=f"[dim]{len(sessions)} session(s)  •  ctf start <name> to begin[/]",
         caption_justify="right",
@@ -464,7 +465,7 @@ def set_target(ip, host, os_guess, platform, difficulty, notes):
 def show_config():
     """Show the active configuration (keys are masked)."""
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
-    table.add_column("Key",   style="bold magenta")
+    table.add_column("Key",   style="bold #8B5CF6")
     table.add_column("Value", style="white")
 
     def _mask(key: str, prefix_len: int = 8) -> str:
@@ -476,7 +477,7 @@ def show_config():
     masked_htb  = _mask(config.htb_api_key, 4)
 
     # Backend badge
-    _backend_color = {"claude": "magenta", "groq": "green", "ollama": "yellow"}.get(config.ai_backend, "dim")
+    _backend_color = {"claude": "#8B5CF6", "groq": "#10B981", "ollama": "#F59E0B"}.get(config.ai_backend, "dim")
     backend_display = f"[bold {_backend_color}]{config.ai_backend}[/]"
 
     table.add_row("ai_backend",            backend_display)
@@ -518,13 +519,13 @@ def show_config():
     console.print()
     console.print(Panel(
         table,
-        title="[bold magenta]Active Configuration[/]",
-        border_style="magenta",
+        title="[bold #8B5CF6]Active Configuration[/]",
+        border_style="#8B5CF6",
         expand=False,
     ))
     console.print(f"\n  Encryption:  {enc_status}")
     console.print(f"  Config file: [dim]~/.ctf_copilot/config.yaml[/]")
-    console.print(f"  Reconfigure: [bold magenta]ctf setup[/]")
+    console.print(f"  Reconfigure: [bold #8B5CF6]ctf setup[/]")
     console.print()
 
 
@@ -574,7 +575,7 @@ def note(text, show_list, delete_id, pin_id, tag):
     if pin_id is not None:
         new_state = _pin(session.id, pin_id)
         label = "📌 Pinned" if new_state else "Unpinned"
-        console.print(f"  [bold cyan]✓[/]  {label} note [bold]#{pin_id}[/].")
+        console.print(f"  [bold #8B5CF6]✓[/]  {label} note [bold]#{pin_id}[/].")
         return
 
     # ── list mode ─────────────────────────────────────────────────────────
@@ -681,10 +682,10 @@ def vault_list_cmd():
         console.print(Panel(
             "\n  No vaults yet.\n\n"
             "  Create one:\n"
-            "  [bold magenta]ctf vault new \"Web Techniques\"[/]\n"
-            "  [bold magenta]ctf vault new \"Active Directory\"[/]\n",
-            title="[bold magenta]Knowledge Vaults[/]",
-            border_style="magenta",
+            "  [bold #8B5CF6]ctf vault new \"Web Techniques\"[/]\n"
+            "  [bold #8B5CF6]ctf vault new \"Active Directory\"[/]\n",
+            title="[bold #8B5CF6]Knowledge Vaults[/]",
+            border_style="#8B5CF6",
             box=box.ROUNDED,
             expand=False,
         ))
@@ -693,8 +694,8 @@ def vault_list_cmd():
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold magenta",
-        title="[bold magenta]Knowledge Vaults[/]",
+        header_style="bold #8B5CF6",
+        title="[bold #8B5CF6]Knowledge Vaults[/]",
         caption="[dim]ctf vault open <name> — enter a vault[/]",
         padding=(0, 1),
     )
@@ -738,7 +739,7 @@ def vault_new(name, description):
     console.print(Panel(
         f"\n  [{color}]●[/]  [bold]{v['name']}[/]\n"
         + (f"  [dim]{description}[/]\n" if description else "")
-        + f"\n  Open it now:  [bold magenta]ctf vault open \"{v['name']}\"[/]\n",
+        + f"\n  Open it now:  [bold #8B5CF6]ctf vault open \"{v['name']}\"[/]\n",
         title=f"[bold {color}]Vault Created[/]",
         border_style=color,
         box=box.ROUNDED,
@@ -863,7 +864,7 @@ def history(limit, tool, with_output):
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold magenta",
+        header_style="bold #8B5CF6",
         title=f"[bold]Command History[/] (last {len(commands)})",
         expand=True,
     )
@@ -931,7 +932,7 @@ def findings(show):
     # --- Services ---
     if show in ("services", "all"):
         if svcs:
-            t = Table(box=box.ROUNDED, header_style="bold magenta",
+            t = Table(box=box.ROUNDED, header_style="bold #8B5CF6",
                       title="[bold]Open Services[/]", show_header=True)
             t.add_column("Port",     width=8)
             t.add_column("Proto",    width=6)
@@ -954,7 +955,7 @@ def findings(show):
     # --- Web Findings ---
     if show in ("web", "all"):
         if webs:
-            t = Table(box=box.ROUNDED, header_style="bold magenta",
+            t = Table(box=box.ROUNDED, header_style="bold #8B5CF6",
                       title="[bold]Web Findings[/]", show_header=True)
             t.add_column("Status", width=8)
             t.add_column("Method", width=7)
@@ -981,7 +982,7 @@ def findings(show):
     # --- Credentials ---
     if show in ("creds", "all"):
         if creds:
-            t = Table(box=box.ROUNDED, header_style="bold magenta",
+            t = Table(box=box.ROUNDED, header_style="bold #8B5CF6",
                       title="[bold]Credentials[/]", show_header=True)
             t.add_column("Username")
             t.add_column("Password")
@@ -1037,8 +1038,8 @@ def show_context(ai_format):
         f"[bold]Target:[/] [yellow]{ctx.target}[/]  |  "
         f"[bold]Platform:[/] {ctx.session.platform or '-'}  |  "
         f"[bold]Difficulty:[/] {ctx.session.difficulty or '-'}",
-        title="[bold magenta]Session Context[/]",
-        border_style="magenta",
+        title="[bold #8B5CF6]Session Context[/]",
+        border_style="#8B5CF6",
         expand=True,
     ))
 
@@ -1215,7 +1216,7 @@ def show_rules(tag, detail, do_reload):
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold magenta",
+        header_style="bold #8B5CF6",
         title="[bold]Pattern Rules[/]",
         expand=True,
     )
@@ -1442,8 +1443,8 @@ def writeup(session_name, output, no_ai, to_stdout):
             f"  [bold]File:[/] [yellow]{dest}[/]\n\n"
             f"  Open it in any Markdown viewer, or push it to GitHub Gist:\n"
             f"  [dim]gh gist create {dest} --public[/]",
-            title="[bold magenta]CTF Writeup Generated[/]",
-            border_style="magenta",
+            title="[bold #8B5CF6]CTF Writeup Generated[/]",
+            border_style="#8B5CF6",
             expand=False,
         )
     )
@@ -1491,7 +1492,7 @@ def run_searchsploit(query, limit):
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold magenta",
+        header_style="bold #8B5CF6",
         title=f"[bold]ExploitDB Results[/] ({len(results)} found)",
         expand=True,
     )
@@ -1612,8 +1613,8 @@ def timeline(session_name, limit):
         f"[bold]Session:[/] {target_session.name}  |  "
         f"[bold]Target:[/] [yellow]{getattr(target_session, 'target_ip', '') or '-'}[/]  |  "
         f"[bold]{len(commands)}[/] commands  |  [bold]{len(hints)}[/] hints",
-        title="[bold magenta]Attack Timeline[/]",
-        border_style="magenta",
+        title="[bold #8B5CF6]Attack Timeline[/]",
+        border_style="#8B5CF6",
         expand=True,
     ))
     console.print()

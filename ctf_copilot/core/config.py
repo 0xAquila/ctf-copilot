@@ -311,19 +311,31 @@ db_path: ""
     _CONFIG_FILE.write_text(template)
 
 
-def save_config_value(key: str, value: str) -> None:
+def save_config_value(key: str, value) -> None:
     """
     Write a single key=value pair into the config YAML, preserving all other
     existing keys and comments.  API key fields are automatically encrypted
     using Fernet (AES-128) before being written to disk.
+
+    value may be str, bool, int, or float.  Booleans are written as unquoted
+    YAML booleans (true/false) so yaml.safe_load reads them back as Python bool.
     """
     from ctf_copilot.core.keyring import ENCRYPTED_FIELDS, encrypt
 
     write_default_config()          # ensure file exists
     raw = _CONFIG_FILE.read_text(encoding="utf-8")
 
+    # Normalise string "true"/"false" → Python bool for bool fields in Config
+    if isinstance(value, str) and value.lower() in ("true", "false", "yes", "no"):
+        bool_fields = {
+            name for name, f in Config.__dataclass_fields__.items()
+            if f.default is True or f.default is False
+        }
+        if key in bool_fields:
+            value = value.lower() in ("true", "yes")
+
     # Encrypt API keys before writing to disk
-    stored_value: str = value
+    stored_value = value
     if key in ENCRYPTED_FIELDS and isinstance(value, str) and value:
         stored_value = encrypt(value)
 
@@ -354,3 +366,15 @@ def save_config_value(key: str, value: str) -> None:
 
 # Module-level singleton — import and use directly
 config: Config = load_config()
+
+
+def reload_config() -> Config:
+    """
+    Re-read the config file and update the singleton *in place* so that all
+    modules that imported `config` earlier (e.g. engine/ai.py) immediately
+    see the new values without being re-imported.
+    """
+    new = load_config()
+    for field_name in Config.__dataclass_fields__:
+        setattr(config, field_name, getattr(new, field_name))
+    return config

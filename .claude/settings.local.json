@@ -13,7 +13,8 @@
       "Bash(python -c \"import ctf_copilot.core.config; import ctf_copilot.engine.ai; import ctf_copilot.interface.display; import ctf_copilot.interface.setup_wizard; print\\('All imports OK'\\)\")",
       "Bash(python -c ' *)",
       "Bash(xargs wc *)",
-      "Bash(python -m pytest tests/ -q --tb=short)"
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(python -c \"from ctf_copilot.cli import cli; from click.testing import CliRunner; r = CliRunner\\(\\).invoke\\(cli, ['--help']\\); print\\(r.output\\)\")"
     ]
   }
 }

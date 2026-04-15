@@ -62,24 +62,24 @@ def show_hint(
     # Choose style based on source
     if source in ("ai", "ollama", "groq"):
         if source == "ollama":
-            border_style = "bold yellow"
+            border_style = "#F59E0B"
             label        = "🦙 Ollama Hint"
         elif source == "groq":
-            border_style = "bold green"
+            border_style = "#10B981"
             label        = "⚡ Groq Hint"
         else:
-            border_style = "bold magenta"
+            border_style = "#8B5CF6"
             label        = "✦ Copilot Hint"
-        title = f"[{border_style}]{label}[/]"
+        title = f"[bold {border_style}]{label}[/]"
     elif source == "nvd":
-        border_style = "bold red"
-        title        = "[bold red]NVD CVE[/]"
+        border_style = "#EF4444"
+        title        = "[bold #EF4444]⚠ NVD CVE[/]"
     elif source == "searchsploit":
-        border_style = "bold magenta"
-        title        = "[bold magenta]ExploitDB[/]"
+        border_style = "#60A5FA"
+        title        = "[bold #60A5FA]ExploitDB[/]"
     else:
-        border_style = "bold yellow"
-        title        = "[bold yellow]Pattern Match[/]"
+        border_style = "#60A5FA"
+        title        = "[bold #60A5FA]Pattern Match[/]"
 
     # Build subtitle
     subtitle_parts = []
