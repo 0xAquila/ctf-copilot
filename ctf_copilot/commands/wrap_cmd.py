@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -67,35 +66,124 @@ def _check_for_flags(text: str) -> list[str]:
 
 def _run_tool_capture(args: list[str]) -> tuple[int, str]:
     """
-    Run a subprocess, stream its combined stdout+stderr to the terminal
-    in real time, and return (exit_code, full_output_string).
-
-    Merges stderr into stdout so the terminal sees a single interleaved
-    stream — matching how most CTF tools behave naturally.
+    Run a subprocess connected to a PTY so the tool behaves exactly as if
+    run directly in the terminal (colours, progress bars, real-time output,
+    no pipe-detection quirks).  Falls back to pipe capture on Windows.
     """
-    output_lines: list[str] = []
-    lock = threading.Lock()
+    try:
+        return _run_pty(args)
+    except (ImportError, AttributeError, OSError):
+        return _run_pipe(args)
 
+
+def _run_pty(args: list[str]) -> tuple[int, str]:
+    """PTY-based capture — Linux/macOS only."""
+    import pty
+    import select
+    import fcntl
+    import termios
+    import signal as _signal
+
+    output_chunks: list[str] = []
+    master_fd = slave_fd = -1
+
+    master_fd, slave_fd = pty.openpty()
+
+    # Mirror the real terminal size onto the PTY so tools render correctly
+    try:
+        winsize = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, b"\x00" * 8)
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
+    except Exception:
+        pass
+
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            env=os.environ.copy(),
+        )
+    except FileNotFoundError:
+        os.close(master_fd); os.close(slave_fd)
+        msg = f"ctf-wrap: command not found: {args[0]}\n"
+        sys.stderr.write(msg)
+        return 127, msg
+    except PermissionError:
+        os.close(master_fd); os.close(slave_fd)
+        msg = f"ctf-wrap: permission denied: {args[0]}\n"
+        sys.stderr.write(msg)
+        return 126, msg
+
+    os.close(slave_fd)  # parent only needs the master end
+
+    # Forward terminal resize events to the PTY
+    def _sigwinch(sig, frame):
+        try:
+            sz = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, b"\x00" * 8)
+            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, sz)
+        except Exception:
+            pass
+
+    old_sigwinch = None
+    try:
+        old_sigwinch = _signal.signal(_signal.SIGWINCH, _sigwinch)
+    except (OSError, ValueError):
+        pass
+
+    try:
+        while True:
+            exited = proc.poll() is not None
+            try:
+                r, _, _ = select.select([master_fd], [], [], 0.05)
+            except (select.error, ValueError):
+                break
+            if r:
+                try:
+                    data = os.read(master_fd, 65536)
+                except OSError:
+                    break   # EIO = slave closed (process exited)
+                if data:
+                    text = data.decode("utf-8", errors="replace")
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
+                    output_chunks.append(text)
+            elif exited:
+                break
+    finally:
+        if old_sigwinch is not None:
+            try:
+                _signal.signal(_signal.SIGWINCH, old_sigwinch)
+            except Exception:
+                pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+    proc.wait()
+    return proc.returncode, "".join(output_chunks)
+
+
+def _run_pipe(args: list[str]) -> tuple[int, str]:
+    """Pipe-based fallback for Windows."""
+    output_lines: list[str] = []
     try:
         process = subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,   # merge stderr → stdout
-            bufsize=1,                  # line-buffered
+            stderr=subprocess.STDOUT,
+            bufsize=1,
             universal_newlines=True,
             env=os.environ.copy(),
         )
-
-        # Stream lines as they arrive
         for line in process.stdout:
             sys.stdout.write(line)
             sys.stdout.flush()
-            with lock:
-                output_lines.append(line)
-
+            output_lines.append(line)
         process.wait()
         return process.returncode, "".join(output_lines)
-
     except FileNotFoundError:
         msg = f"ctf-wrap: command not found: {args[0]}\n"
         sys.stderr.write(msg)
