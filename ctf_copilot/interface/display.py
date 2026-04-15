@@ -62,14 +62,14 @@ def show_hint(
     # Choose style based on source
     if source in ("ai", "ollama", "groq"):
         if source == "ollama":
-            border_style = "bold cyan"
-            label        = "Ollama Hint"
+            border_style = "bold yellow"
+            label        = "🦙 Ollama Hint"
         elif source == "groq":
             border_style = "bold green"
             label        = "⚡ Groq Hint"
         else:
-            border_style = "bold cyan"
-            label        = "Copilot Hint"
+            border_style = "bold magenta"
+            label        = "✦ Copilot Hint"
         title = f"[{border_style}]{label}[/]"
     elif source == "nvd":
         border_style = "bold red"

@@ -106,9 +106,137 @@ def load_config() -> Config:
     return Config(**filtered)
 
 
+def install_hooks() -> None:
+    """
+    Write the shell hook files to ~/.ctf_copilot/ so the user can source them.
+    Safe to call on every startup — skips files that already exist.
+    """
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    _BASH_HOOK = """\
+#!/usr/bin/env bash
+# CTF Copilot — Bash command logger hook
+# This file is sourced by ctf-init.sh. Do NOT execute it directly.
+
+_CTF_LAST_CMD=""
+_CTF_LAST_CMD_TS=""
+
+_ctf_preexec() {
+    _CTF_LAST_CMD="$BASH_COMMAND"
+    _CTF_LAST_CMD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+trap '_ctf_preexec' DEBUG
+
+_ctf_precmd() {
+    local exit_code=$?
+    [[ -z "$_CTF_LAST_CMD" ]]          && return
+    [[ "$_CTF_LAST_CMD" == "ctf"* ]]   && return
+    [[ "$_CTF_LAST_CMD" == "_ctf_"* ]] && return
+    ctf-log \\
+        --command   "$_CTF_LAST_CMD" \\
+        --exit-code "$exit_code"     \\
+        --cwd       "$PWD"           \\
+        --timestamp "$_CTF_LAST_CMD_TS" \\
+        2>/dev/null &
+    _CTF_LAST_CMD=""
+}
+
+if [[ -z "$PROMPT_COMMAND" ]]; then
+    PROMPT_COMMAND="_ctf_precmd"
+elif [[ "$PROMPT_COMMAND" != *"_ctf_precmd"* ]]; then
+    PROMPT_COMMAND="${PROMPT_COMMAND};_ctf_precmd"
+fi
+"""
+
+    _ZSH_HOOK = """\
+#!/usr/bin/env zsh
+# CTF Copilot — Zsh command logger hook
+# This file is sourced by ctf-init.sh. Do NOT execute it directly.
+
+_CTF_LAST_CMD=""
+_CTF_LAST_CMD_TS=""
+
+_ctf_preexec() {
+    _CTF_LAST_CMD="$1"
+    _CTF_LAST_CMD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+_ctf_precmd() {
+    local exit_code=$?
+    [[ -z "$_CTF_LAST_CMD" ]]          && return
+    [[ "$_CTF_LAST_CMD" == "ctf"* ]]   && return
+    [[ "$_CTF_LAST_CMD" == "_ctf_"* ]] && return
+    ctf-log \\
+        --command   "$_CTF_LAST_CMD" \\
+        --exit-code "$exit_code"     \\
+        --cwd       "$PWD"           \\
+        --timestamp "$_CTF_LAST_CMD_TS" \\
+        2>/dev/null &
+    _CTF_LAST_CMD=""
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _ctf_preexec
+add-zsh-hook precmd  _ctf_precmd
+"""
+
+    _INIT_HOOK = """\
+#!/usr/bin/env bash
+# CTF Copilot — Shell initialisation script
+#
+# Add to ~/.bashrc for permanent activation:
+#   echo 'source ~/.ctf_copilot/ctf-init.sh' >> ~/.bashrc
+#
+# Or source manually before a CTF session:
+#   source ~/.ctf_copilot/ctf-init.sh
+
+_CTF_HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
+
+if [ -n "$ZSH_VERSION" ]; then
+    source "$_CTF_HOOKS_DIR/zsh_hook.zsh"
+elif [ -n "$BASH_VERSION" ]; then
+    source "$_CTF_HOOKS_DIR/bash_hook.sh"
+else
+    echo "[CTF Copilot] Warning: unsupported shell." >&2
+fi
+
+_ctf_wrap() {
+    local tool="$1"; shift
+    if command -v "ctf-wrap" &>/dev/null; then
+        ctf-wrap --tool "$tool" -- "$@"
+    else
+        command "$tool" "$@"
+    fi
+}
+
+for _t in nmap gobuster ffuf nikto sqlmap hydra feroxbuster wfuzz enum4linux; do
+    alias "$_t"="_ctf_wrap $_t"
+done
+unset _t
+
+echo "[CTF Copilot] ✓ Shell hooks active — tools are now being tracked."
+"""
+
+    hooks = {
+        "bash_hook.sh": _BASH_HOOK,
+        "zsh_hook.zsh": _ZSH_HOOK,
+        "ctf-init.sh":  _INIT_HOOK,
+    }
+    for filename, content in hooks.items():
+        dest = _CONFIG_DIR / filename
+        if not dest.exists():
+            dest.write_text(content)
+            try:
+                import os
+                os.chmod(dest, 0o755)
+            except OSError:
+                pass
+
+
 def write_default_config() -> None:
     """Write a commented default config.yaml on first run."""
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    install_hooks()   # ensure hook files are always present
     if _CONFIG_FILE.exists():
         return
     template = """\

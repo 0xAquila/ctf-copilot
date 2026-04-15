@@ -77,8 +77,8 @@ def _print_session_panel(session) -> None:
 
     console.print(Panel(
         "\n".join(lines),
-        title="[bold cyan]CTF Copilot — Session[/]",
-        border_style="cyan",
+        title="[bold magenta]CTF Copilot — Session[/]",
+        border_style="magenta",
         expand=False,
     ))
 
@@ -87,14 +87,21 @@ def _print_session_panel(session) -> None:
 # Root group
 # ---------------------------------------------------------------------------
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
     """CTF Copilot — your AI-assisted penetration testing companion.\n
     Start a session, run your tools as usual, and get real-time hints.
+    Run [bold]ctf[/] with no arguments to open the interactive menu.
     """
     write_default_config()
     init_db()
+
+    # Launch interactive REPL when called with no subcommand
+    if ctx.invoked_subcommand is None:
+        from ctf_copilot.interface.repl import run_repl
+        run_repl()
+        return
 
     # First-run nudge: show once when no key is configured for the active backend
     # (skip for `ctf setup` itself so the wizard isn't double-prompted)
@@ -109,7 +116,7 @@ def cli(ctx):
         if missing and not config.offline_mode:
             console.print(
                 f"\n  [dim]No API key configured for [bold]{backend}[/] backend. "
-                "Run [bold cyan]ctf setup[/] to get started.[/]\n"
+                "Run [bold magenta]ctf setup[/] to get started.[/]\n"
             )
 
 
@@ -170,7 +177,7 @@ def stop():
     if not session:
         console.print("[yellow]No active session. Nothing to stop.[/]")
         sys.exit(0)
-    console.print(f"[bold yellow]Session '[cyan]{session.name}[/]' paused.[/]")
+    console.print(f"[bold yellow]Session '[yellow]{session.name}[/]' paused.[/]")
     console.print(f"  Resume later with: [bold]ctf resume {session.name}[/]")
 
 
@@ -208,12 +215,12 @@ def done():
         console.print("[yellow]No active session.[/]")
         sys.exit(0)
     console.print(Panel(
-        f"[bold green]Session '[cyan]{session.name}[/]' completed! Well done.[/]\n\n"
+        f"[bold green]Session '[yellow]{session.name}[/]' completed! Well done.[/]\n\n"
         f"  Generate your writeup now:\n"
         f"  [bold]ctf writeup[/]                  - AI-enhanced Markdown writeup\n"
         f"  [bold]ctf writeup --no-ai[/]           - Offline writeup (no API cost)\n"
         f"  [bold]ctf writeup --stdout | less[/]   - Preview in terminal",
-        title="[bold cyan]Session Complete[/]",
+        title="[bold magenta]Session Complete[/]",
         border_style="green",
         expand=False,
     ))
@@ -258,7 +265,7 @@ def status():
     lines = [
         f"  {status_icon}  [bold white]{session.name}[/]   {_status_badge(session.status)}",
         "",
-        f"  [bold dim]Target:[/]      [cyan]{session.target_ip or session.target_host or '—'}[/]"
+        f"  [bold dim]Target:[/]      [yellow]{session.target_ip or session.target_host or '—'}[/]"
         + (f"  [dim]({session.target_host})[/]" if session.target_ip and session.target_host else ""),
         f"  [bold dim]Platform:[/]    {session.platform or '—'}",
         f"  [bold dim]Difficulty:[/]  {session.difficulty or '—'}",
@@ -267,7 +274,7 @@ def status():
         "",
         "  ──────────────── Intel ─────────────────",
         f"  Services [yellow]{svc_cnt:>4}[/]    Web findings [magenta]{web_cnt:>4}[/]",
-        f"  Commands  [dim]{cmd_cnt:>4}[/]    AI hints      [cyan]{hint_cnt:>4}[/]",
+        f"  Commands  [dim]{cmd_cnt:>4}[/]    AI hints      [yellow]{hint_cnt:>4}[/]",
         f"  Creds     [dim]{cred_cnt:>4}[/]    Notes         [blue]{n_cnt:>4}[/]",
         f"  Flags   [bold green]{flag_cnt:>6}[/]",
     ]
@@ -277,8 +284,8 @@ def status():
     console.print()
     console.print(Panel(
         "\n".join(lines),
-        title="[bold cyan]Active Session[/]",
-        border_style="cyan",
+        title="[bold magenta]Active Session[/]",
+        border_style="magenta",
         box=box.DOUBLE_EDGE,
         expand=False,
     ))
@@ -303,9 +310,9 @@ def sessions_list():
         console.print(Panel(
             "\n  No sessions yet.\n\n"
             "  Start your first session:\n"
-            "  [bold cyan]ctf start <machine-name> --ip <target-ip>[/]\n",
-            title="[bold cyan]CTF Sessions[/]",
-            border_style="cyan",
+            "  [bold magenta]ctf start <machine-name> --ip <target-ip>[/]\n",
+            title="[bold magenta]CTF Sessions[/]",
+            border_style="magenta",
             box=box.ROUNDED,
             expand=False,
         ))
@@ -354,8 +361,8 @@ def sessions_list():
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold cyan",
-        title="[bold cyan]CTF Sessions[/]",
+        header_style="bold magenta",
+        title="[bold magenta]CTF Sessions[/]",
         title_justify="left",
         caption=f"[dim]{len(sessions)} session(s)  •  ctf start <name> to begin[/]",
         caption_justify="right",
@@ -364,12 +371,12 @@ def sessions_list():
     table.add_column("",          width=2,  no_wrap=True)   # current marker
     table.add_column("Name",      style="bold white", min_width=18)
     table.add_column("Status",    min_width=10)
-    table.add_column("Target",    style="cyan",        min_width=14)
+    table.add_column("Target",    style="yellow",        min_width=14)
     table.add_column("Platform",  min_width=12)
     table.add_column("Diff",      width=8)
     table.add_column("Cmds",      style="dim",   width=5,  justify="right")
     table.add_column("Svcs",      style="yellow",width=5,  justify="right")
-    table.add_column("Hints",     style="cyan",  width=6,  justify="right")
+    table.add_column("Hints",     style="yellow",  width=6,  justify="right")
     table.add_column("Notes",     style="blue",  width=6,  justify="right")
     table.add_column("Flags",     style="green", width=6,  justify="right")
     table.add_column("Started",   style="dim",   min_width=11)
@@ -444,9 +451,9 @@ def set_target(ip, host, os_guess, platform, difficulty, notes):
         return
 
     update_session(session.id, **updates)
-    console.print(f"[bold green]Session '[cyan]{session.name}[/]' updated.[/]")
+    console.print(f"[bold green]Session '[yellow]{session.name}[/]' updated.[/]")
     for k, v in updates.items():
-        console.print(f"  {k}: [cyan]{v}[/]")
+        console.print(f"  {k}: [yellow]{v}[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +464,7 @@ def set_target(ip, host, os_guess, platform, difficulty, notes):
 def show_config():
     """Show the active configuration (keys are masked)."""
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
-    table.add_column("Key",   style="bold cyan")
+    table.add_column("Key",   style="bold magenta")
     table.add_column("Value", style="white")
 
     def _mask(key: str, prefix_len: int = 8) -> str:
@@ -469,7 +476,7 @@ def show_config():
     masked_htb  = _mask(config.htb_api_key, 4)
 
     # Backend badge
-    _backend_color = {"claude": "cyan", "groq": "green", "ollama": "yellow"}.get(config.ai_backend, "dim")
+    _backend_color = {"claude": "magenta", "groq": "green", "ollama": "yellow"}.get(config.ai_backend, "dim")
     backend_display = f"[bold {_backend_color}]{config.ai_backend}[/]"
 
     table.add_row("ai_backend",            backend_display)
@@ -511,13 +518,13 @@ def show_config():
     console.print()
     console.print(Panel(
         table,
-        title="[bold cyan]Active Configuration[/]",
-        border_style="cyan",
+        title="[bold magenta]Active Configuration[/]",
+        border_style="magenta",
         expand=False,
     ))
     console.print(f"\n  Encryption:  {enc_status}")
     console.print(f"  Config file: [dim]~/.ctf_copilot/config.yaml[/]")
-    console.print(f"  Reconfigure: [bold cyan]ctf setup[/]")
+    console.print(f"  Reconfigure: [bold magenta]ctf setup[/]")
     console.print()
 
 
@@ -674,10 +681,10 @@ def vault_list_cmd():
         console.print(Panel(
             "\n  No vaults yet.\n\n"
             "  Create one:\n"
-            "  [bold cyan]ctf vault new \"Web Techniques\"[/]\n"
-            "  [bold cyan]ctf vault new \"Active Directory\"[/]\n",
-            title="[bold cyan]Knowledge Vaults[/]",
-            border_style="cyan",
+            "  [bold magenta]ctf vault new \"Web Techniques\"[/]\n"
+            "  [bold magenta]ctf vault new \"Active Directory\"[/]\n",
+            title="[bold magenta]Knowledge Vaults[/]",
+            border_style="magenta",
             box=box.ROUNDED,
             expand=False,
         ))
@@ -686,15 +693,15 @@ def vault_list_cmd():
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold cyan",
-        title="[bold cyan]Knowledge Vaults[/]",
+        header_style="bold magenta",
+        title="[bold magenta]Knowledge Vaults[/]",
         caption="[dim]ctf vault open <name> — enter a vault[/]",
         padding=(0, 1),
     )
     table.add_column("#",           style="dim",        width=4)
     table.add_column("Vault",       style="bold white", min_width=20)
     table.add_column("Description", style="dim",        ratio=1)
-    table.add_column("Entries",     style="cyan",       width=8,  justify="right")
+    table.add_column("Entries",     style="yellow",       width=8,  justify="right")
     table.add_column("Updated",     style="dim",        width=12, no_wrap=True)
 
     for v in vaults:
@@ -731,7 +738,7 @@ def vault_new(name, description):
     console.print(Panel(
         f"\n  [{color}]●[/]  [bold]{v['name']}[/]\n"
         + (f"  [dim]{description}[/]\n" if description else "")
-        + f"\n  Open it now:  [bold cyan]ctf vault open \"{v['name']}\"[/]\n",
+        + f"\n  Open it now:  [bold magenta]ctf vault open \"{v['name']}\"[/]\n",
         title=f"[bold {color}]Vault Created[/]",
         border_style=color,
         box=box.ROUNDED,
@@ -839,7 +846,7 @@ def history(limit, tool, with_output):
     if not commands:
         msg = "No commands logged yet."
         if tool:
-            msg = f"No commands logged for tool '[cyan]{tool}[/]' yet."
+            msg = f"No commands logged for tool '[yellow]{tool}[/]' yet."
         console.print(f"[yellow]{msg}[/]")
         return
 
@@ -856,7 +863,7 @@ def history(limit, tool, with_output):
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold cyan",
+        header_style="bold magenta",
         title=f"[bold]Command History[/] (last {len(commands)})",
         expand=True,
     )
@@ -919,12 +926,12 @@ def findings(show):
         flags = conn.execute("SELECT * FROM flags        WHERE session_id = ? ORDER BY found_at",  (session.id,)).fetchall()
 
     console.print(f"\n  Session: [bold cyan]{session.name}[/]  |  "
-                  f"Target: [cyan]{session.target_ip or session.target_host or '-'}[/]\n")
+                  f"Target: [yellow]{session.target_ip or session.target_host or '-'}[/]\n")
 
     # --- Services ---
     if show in ("services", "all"):
         if svcs:
-            t = Table(box=box.ROUNDED, header_style="bold cyan",
+            t = Table(box=box.ROUNDED, header_style="bold magenta",
                       title="[bold]Open Services[/]", show_header=True)
             t.add_column("Port",     width=8)
             t.add_column("Proto",    width=6)
@@ -947,7 +954,7 @@ def findings(show):
     # --- Web Findings ---
     if show in ("web", "all"):
         if webs:
-            t = Table(box=box.ROUNDED, header_style="bold cyan",
+            t = Table(box=box.ROUNDED, header_style="bold magenta",
                       title="[bold]Web Findings[/]", show_header=True)
             t.add_column("Status", width=8)
             t.add_column("Method", width=7)
@@ -974,7 +981,7 @@ def findings(show):
     # --- Credentials ---
     if show in ("creds", "all"):
         if creds:
-            t = Table(box=box.ROUNDED, header_style="bold cyan",
+            t = Table(box=box.ROUNDED, header_style="bold magenta",
                       title="[bold]Credentials[/]", show_header=True)
             t.add_column("Username")
             t.add_column("Password")
@@ -1027,11 +1034,11 @@ def show_context(ai_format):
     console.print()
     console.print(Panel(
         f"[bold]Session:[/] {ctx.session.name}  |  "
-        f"[bold]Target:[/] [cyan]{ctx.target}[/]  |  "
+        f"[bold]Target:[/] [yellow]{ctx.target}[/]  |  "
         f"[bold]Platform:[/] {ctx.session.platform or '-'}  |  "
         f"[bold]Difficulty:[/] {ctx.session.difficulty or '-'}",
-        title="[bold cyan]Session Context[/]",
-        border_style="cyan",
+        title="[bold magenta]Session Context[/]",
+        border_style="magenta",
         expand=True,
     ))
 
@@ -1119,7 +1126,7 @@ def dashboard(once, interval, session_name):
                 (session_name,),
             ).fetchone()
         if not row:
-            console.print(f"[bold red]Error:[/] Session '[cyan]{session_name}[/]' not found.")
+            console.print(f"[bold red]Error:[/] Session '[yellow]{session_name}[/]' not found.")
             sys.exit(1)
 
         class _S:
@@ -1166,7 +1173,7 @@ def show_parsers():
     registered = list_parsers()
     console.print("\n  [bold]Registered parsers:[/]")
     for name in registered:
-        console.print(f"    [cyan]{name}[/]")
+        console.print(f"    [yellow]{name}[/]")
     console.print()
 
 
@@ -1196,25 +1203,25 @@ def show_rules(tag, detail, do_reload):
         tag_lower = tag.lower()
         rules = [r for r in rules if tag_lower in [t.lower() for t in r.get("tags", [])]]
         if not rules:
-            console.print(f"[yellow]No rules found with tag '[cyan]{tag}[/]'.[/]")
+            console.print(f"[yellow]No rules found with tag '[yellow]{tag}[/]'.[/]")
             return
 
     console.print(
         f"\n  [bold]{len(rules)} rule(s) loaded[/]"
-        + (f" (filtered by tag: [cyan]{tag}[/])" if tag else "")
+        + (f" (filtered by tag: [yellow]{tag}[/])" if tag else "")
         + "\n"
     )
 
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold cyan",
+        header_style="bold magenta",
         title="[bold]Pattern Rules[/]",
         expand=True,
     )
     table.add_column("ID",         style="dim",         min_width=20)
     table.add_column("Name",       style="bold white",  ratio=2)
-    table.add_column("Confidence", style="cyan",        width=10, justify="right")
+    table.add_column("Confidence", style="yellow",        width=10, justify="right")
     table.add_column("Priority",   width=8,             justify="center")
     table.add_column("Tags",       style="dim yellow",  ratio=1)
 
@@ -1328,10 +1335,10 @@ def hint_history(limit):
         )
         return
 
-    console.print(f"\n  [bold]Hint history[/] — session [cyan]{session.name}[/]\n")
+    console.print(f"\n  [bold]Hint history[/] — session [yellow]{session.name}[/]\n")
     for i, h in enumerate(reversed(hints), 1):
         source_badge = (
-            "[cyan][AI][/]" if h["source"] == "ai" else "[yellow][Rule][/]"
+            "[yellow][AI][/]" if h["source"] == "ai" else "[yellow][Rule][/]"
         )
         ts = h["timestamp"][:16].replace("T", " ")
         conf = f"  [dim]{h['confidence']:.0%}[/]" if h.get("confidence") else ""
@@ -1374,7 +1381,7 @@ def writeup(session_name, output, no_ai, to_stdout):
                 (session_name,),
             ).fetchone()
         if not row:
-            console.print(f"[bold red]Error:[/] Session '[cyan]{session_name}[/]' not found.")
+            console.print(f"[bold red]Error:[/] Session '[yellow]{session_name}[/]' not found.")
             sys.exit(1)
         # Convert row to a simple namespace for attribute access
         class _S:
@@ -1399,7 +1406,7 @@ def writeup(session_name, output, no_ai, to_stdout):
         )
         use_ai = False
 
-    ai_label = "[cyan]AI-enhanced[/]" if use_ai else "[dim]offline[/]"
+    ai_label = "[yellow]AI-enhanced[/]" if use_ai else "[dim]offline[/]"
     console.print(
         f"\n  Generating {ai_label} writeup for session "
         f"[bold cyan]{target_session.name}[/]..."
@@ -1432,11 +1439,11 @@ def writeup(session_name, output, no_ai, to_stdout):
     console.print(
         Panel(
             f"[bold green]Writeup saved![/]{ai_note}\n\n"
-            f"  [bold]File:[/] [cyan]{dest}[/]\n\n"
+            f"  [bold]File:[/] [yellow]{dest}[/]\n\n"
             f"  Open it in any Markdown viewer, or push it to GitHub Gist:\n"
             f"  [dim]gh gist create {dest} --public[/]",
-            title="[bold cyan]CTF Writeup Generated[/]",
-            border_style="cyan",
+            title="[bold magenta]CTF Writeup Generated[/]",
+            border_style="magenta",
             expand=False,
         )
     )
@@ -1545,7 +1552,7 @@ def timeline(session_name, limit):
                 (session_name,),
             ).fetchone()
         if not row:
-            console.print(f"[bold red]Error:[/] Session '[cyan]{session_name}[/]' not found.")
+            console.print(f"[bold red]Error:[/] Session '[yellow]{session_name}[/]' not found.")
             sys.exit(1)
         class _S: pass
         target_session = _S()
@@ -1585,7 +1592,7 @@ def timeline(session_name, limit):
     if not commands:
         console.print(
             f"\n[dim]  No commands logged yet for session "
-            f"'[cyan]{target_session.name}[/]'.[/]\n"
+            f"'[yellow]{target_session.name}[/]'.[/]\n"
         )
         return
 
@@ -1603,10 +1610,10 @@ def timeline(session_name, limit):
     console.print()
     console.print(Panel(
         f"[bold]Session:[/] {target_session.name}  |  "
-        f"[bold]Target:[/] [cyan]{getattr(target_session, 'target_ip', '') or '-'}[/]  |  "
+        f"[bold]Target:[/] [yellow]{getattr(target_session, 'target_ip', '') or '-'}[/]  |  "
         f"[bold]{len(commands)}[/] commands  |  [bold]{len(hints)}[/] hints",
-        title="[bold cyan]Attack Timeline[/]",
-        border_style="cyan",
+        title="[bold magenta]Attack Timeline[/]",
+        border_style="magenta",
         expand=True,
     ))
     console.print()
@@ -1634,8 +1641,8 @@ def timeline(session_name, limit):
         # Attach hints to this command
         for h in hint_map.get(cmd["id"], []):
             source_badge = {
-                "ai":           "[cyan][AI][/]",
-                "ollama":       "[cyan][Ollama][/]",
+                "ai":           "[yellow][AI][/]",
+                "ollama":       "[yellow][Ollama][/]",
                 "pattern":      "[yellow][Rule][/]",
                 "nvd":          "[red][NVD][/]",
                 "searchsploit": "[magenta][ExploitDB][/]",
@@ -1652,7 +1659,7 @@ def timeline(session_name, limit):
         unlinked = tree.add("[dim]Hints (unlinked)[/]")
         for h in unlinked_hints:
             source_badge = {
-                "ai": "[cyan][AI][/]", "ollama": "[cyan][Ollama][/]",
+                "ai": "[yellow][AI][/]", "ollama": "[yellow][Ollama][/]",
                 "pattern": "[yellow][Rule][/]",
             }.get(h["source"], "[dim][?][/]")
             unlinked.add(f"  {source_badge} [dim]{h['hint_text'][:80]}[/]")

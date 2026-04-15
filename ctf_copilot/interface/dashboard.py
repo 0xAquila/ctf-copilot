@@ -151,7 +151,7 @@ def _header_panel(data: dict) -> Panel:
 
     content = Text(justify="center")
     content.append(f"Session: ", style="bold dim")
-    content.append(f"{name}", style="bold cyan")
+    content.append(f"{name}", style="bold magenta")
     content.append(f"   Target: ", style="bold dim")
     content.append(f"{target}", style="bold white")
     content.append(f"   Platform: ", style="bold dim")
@@ -165,8 +165,8 @@ def _header_panel(data: dict) -> Panel:
 
     return Panel(
         Align.center(content),
-        title="[bold cyan]CTF Copilot[/]",
-        border_style="cyan",
+        title="[bold magenta]CTF Copilot[/]",
+        border_style="magenta",
         box=box.HEAVY,
         padding=(0, 1),
     )
@@ -182,7 +182,7 @@ def _services_panel(data: dict) -> Panel:
 
     t = Table(box=None, show_header=True, header_style="bold yellow",
               padding=(0, 1), expand=True)
-    t.add_column("Port",  style="bold cyan",  width=6,  no_wrap=True)
+    t.add_column("Port",  style="bold yellow", width=6,  no_wrap=True)
     t.add_column("Proto", style="dim",        width=5,  no_wrap=True)
     t.add_column("Service / Version", style="white", ratio=1)
 
@@ -194,7 +194,7 @@ def _services_panel(data: dict) -> Panel:
         svc_str  = f"{svc_name}  [dim]{version[:30]}[/]" if version else svc_name
 
         # Highlight interesting ports
-        port_style = "bold cyan"
+        port_style = "bold yellow"
         interesting = {21, 22, 23, 25, 80, 110, 139, 143, 389, 443,
                        445, 1433, 1521, 3306, 3389, 5432, 5985, 6379, 8080, 8443}
         if svc.get("port") in interesting:
@@ -269,8 +269,8 @@ def _hints_panel(data: dict) -> Panel:
             "  running tools with the shell hook.",
             style="dim",
         )
-        return Panel(body, title="[bold cyan]Latest Hints[/]",
-                     border_style="cyan", box=box.ROUNDED)
+        return Panel(body, title="[bold magenta]Latest Hints[/]",
+                     border_style="magenta", box=box.ROUNDED)
 
     parts: list = []
     for i, h in enumerate(hints):
@@ -285,7 +285,7 @@ def _hints_panel(data: dict) -> Panel:
             badge = Text("[Rule] ", style="bold yellow")
             label = rule or "Pattern"
         else:
-            badge = Text("[AI]   ", style="bold cyan")
+            badge = Text("[AI]   ", style="bold magenta")
             label = "Copilot"
 
         header = Text()
@@ -315,8 +315,8 @@ def _hints_panel(data: dict) -> Panel:
 
     return Panel(
         Group(*parts),
-        title=f"[bold cyan]Latest Hints[/] [dim]({len(hints)})[/]",
-        border_style="cyan",
+        title=f"[bold magenta]Latest Hints[/] [dim]({len(hints)})[/]",
+        border_style="magenta",
         box=box.ROUNDED,
     )
 
@@ -389,7 +389,7 @@ def _footer_panel(data: dict) -> Panel:
     hint_cnt  = data.get("hint_total", len(data["hints"]))
     commands  = data["commands"]
 
-    tools_str = ", ".join(f"[cyan]{t}[/]" for t in tools) if tools else "[dim]none[/]"
+    tools_str = ", ".join(f"[yellow]{t}[/]" for t in tools) if tools else "[dim]none[/]"
     now       = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
     note_cnt  = data.get("note_count", 0)
