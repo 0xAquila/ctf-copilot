@@ -73,7 +73,7 @@ def _clear() -> None:
 def _banner() -> None:
     _console.print(Panel(
         Align.center(Text(_LOGO, style=f"bold {BRAND}")),
-        subtitle=f"[{DIM}]AI Penetration Testing Copilot  ·  ↑↓ arrows · Enter · Esc/Ctrl+C = back[/]",
+        subtitle=f"[{DIM}]AI Penetration Testing Copilot  ·  ↑↓ arrows · Enter to select · Ctrl+C = back[/]",
         border_style=BRAND,
         box=box.DOUBLE_EDGE,
         padding=(0, 1),
@@ -104,8 +104,9 @@ def _info(msg: str) -> None:
 
 def _pause() -> None:
     """Hold the output on screen until the user presses Enter."""
+    _console.print(f"\n  [{DIM}]Press Enter to continue…[/]")
     try:
-        input(f"\n  [{DIM}]  Press Enter to continue…[/]  ")
+        input()
     except (EOFError, KeyboardInterrupt):
         pass
 
@@ -585,57 +586,116 @@ def _action_vaults() -> None:
         _clear()
         _banner()
         _sep("Knowledge Vaults")
-        from ctf_copilot.core.vault import list_vaults, run_vault_repl, create_vault
+
+        # ── What are vaults? ──────────────────────────────────────────────
+        _console.print(Panel(
+            Text.from_markup(
+                f"  [bold]Vaults[/bold] are your permanent, cross-session knowledge base.\n\n"
+                f"  Unlike session notes (which belong to one CTF machine), vaults live\n"
+                f"  forever and are accessible from any session.  Build libraries like:\n\n"
+                f"  [bold {BRAND}]Web Techniques[/]  —  SQL injections, XSS payloads, directory lists\n"
+                f"  [bold {BRAND}]Active Directory[/] —  Bloodhound queries, kerberoasting notes\n"
+                f"  [bold {BRAND}]Privilege Esc[/]    —  SUID tricks, cron job abuse, sudo exploits\n"
+                f"  [bold {BRAND}]Reverse Shells[/]   —  One-liners, listeners, upgrade tricks\n\n"
+                f"  [{DIM}]Open a vault to type-in notes instantly.  They are always saved.[/]"
+            ),
+            title=f"[bold {BRAND}]What are Knowledge Vaults?[/]",
+            border_style=BRAND,
+            box=box.ROUNDED,
+            expand=False,
+            padding=(0, 1),
+        ))
+        _console.print()
+
+        from ctf_copilot.core.vault import list_vaults, run_vault_repl, create_vault, delete_vault
 
         vaults = list_vaults()
         if vaults:
             table = Table(box=box.SIMPLE_HEAD, show_header=True,
                           header_style=f"bold {BRAND}", padding=(0, 1), expand=False)
-            table.add_column("#",           style=ACCENT,         width=4)
-            table.add_column("Vault",       style="bold white",   min_width=18)
-            table.add_column("Description", style=DIM,            ratio=1)
-            table.add_column("Entries",     style=ACCENT,         width=8, justify="right")
+            table.add_column("#",           style=ACCENT,       width=4)
+            table.add_column("Vault",       style="bold white", min_width=18)
+            table.add_column("Description", style=DIM,          ratio=1)
+            table.add_column("Entries",     style=ACCENT,       width=8, justify="right")
             for i, v in enumerate(vaults, 1):
                 color = v.get("color", BRAND)
                 table.add_row(
                     str(i),
                     f"[{color}]●[/]  {v['name']}",
-                    v.get("description") or "",
+                    v.get("description") or "—",
                     str(v.get("entry_count", 0)),
                 )
             _console.print(table)
             _console.print()
 
         choices = [
-            *[questionary.Choice(f"  📂  Open '{v['name']}'", value=f"open:{v['name']}") for v in vaults],
-            questionary.Separator(),
+            questionary.Choice("  ← Back  (Ctrl+C also works)", value="back"),
+            questionary.Separator("  ─────────────────────────────"),
+            *[questionary.Choice(
+                f"  📂  Open '{v['name']}'  [{v.get('entry_count',0)} entries]",
+                value=f"open:{v['name']}"
+            ) for v in vaults],
+            questionary.Separator("  ─────────────────────────────"),
             questionary.Choice("  ➕  Create new vault", value="new"),
-            questionary.Choice("  ← Back",               value="back"),
+            *([questionary.Choice("  🗑  Delete a vault",   value="delete")] if vaults else []),
         ]
         try:
             choice = questionary.select(
                 "Vault actions:",
                 choices=choices,
                 style=QSTYLE,
+                use_indicator=True,
             ).ask()
         except KeyboardInterrupt:
             return
 
         if not choice or choice == "back":
             return
+
         if choice == "new":
-            name = _ask_text("Vault name")
+            _clear()
+            _banner()
+            _sep("Create Vault")
+            name = _ask_text("Vault name  (e.g. 'Web Techniques', 'Priv Esc')")
             if not name:
                 continue
             desc = _ask_text("Description  (optional)", default="")
             try:
                 v = create_vault(name, description=desc)
-                _ok(f"Vault '{v['name']}' created.  Opening it now…")
+                _ok(f"Vault [bold]{v['name']}[/] created.  Opening it now…")
                 time.sleep(0.5)
                 run_vault_repl(v["name"])
             except ValueError as exc:
                 _err(str(exc))
                 _pause()
+
+        elif choice == "delete":
+            del_choices = [
+                *[questionary.Choice(f"  🗑  {v['name']}  [{v.get('entry_count',0)} entries]",
+                                     value=v["name"]) for v in vaults],
+                questionary.Separator(),
+                questionary.Choice("  ← Cancel", value=""),
+            ]
+            try:
+                target = questionary.select(
+                    "Which vault to delete?",
+                    choices=del_choices,
+                    style=QSTYLE,
+                ).ask()
+            except KeyboardInterrupt:
+                continue
+            if not target:
+                continue
+            if _ask_confirm(
+                f"Permanently delete vault '{target}' and ALL its entries?",
+                default=False,
+            ):
+                if delete_vault(target):
+                    _ok(f"Vault '{target}' deleted.")
+                else:
+                    _err(f"Vault '{target}' not found.")
+                time.sleep(0.7)
+
         elif choice.startswith("open:"):
             run_vault_repl(choice.split(":", 1)[1])
 

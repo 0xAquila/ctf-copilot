@@ -40,8 +40,8 @@ _console = Console(
     highlight=False,
 )
 
-# Vault display color palette (rotates for variety)
-_PALETTE = ["cyan", "green", "magenta", "yellow", "blue"]
+# Vault display color palette (rotates for variety) — aesthetic hex colors
+_PALETTE = ["#8B5CF6", "#10B981", "#60A5FA", "#F59E0B", "#F472B6"]
 
 
 # ---------------------------------------------------------------------------
@@ -212,12 +212,12 @@ def _vault_banner(vault: dict) -> None:
     if desc:
         lines.append(f"  {desc}\n", style="dim")
     lines.append(f"\n  {entry_count} entries  •  Created {created}\n", style="dim")
-    lines.append(
-        "  Commands: [bold]add[/] [italic]text[/]   "
-        "[bold]del[/] [italic]#[/]   [bold]search[/] [italic]term[/]   "
-        "[bold]pin[/]   [bold]ls[/]   [bold]help[/]   [bold]exit[/]",
-        style="dim",
-    )
+    # Render command hints as proper Rich markup
+    lines.append_text(Text.from_markup(
+        "  [dim]Just type to add an entry.  "
+        "Commands: [/dim][bold]del #[/bold]  [bold]search[/bold]  "
+        "[bold]ls[/bold]  [bold]help[/bold]  [bold]exit[/bold]"
+    ))
 
     _console.print()
     _console.print(Panel(

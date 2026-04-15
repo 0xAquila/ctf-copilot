@@ -15,7 +15,8 @@
       "Bash(xargs wc *)",
       "Bash(python -m pytest tests/ -q --tb=short)",
       "Bash(python -c \"from ctf_copilot.cli import cli; from click.testing import CliRunner; r = CliRunner\\(\\).invoke\\(cli, ['--help']\\); print\\(r.output\\)\")",
-      "Bash(python -c \"import click; print\\(click.__version__\\)\")"
+      "Bash(python -c \"import click; print\\(click.__version__\\)\")",
+      "Bash(python -c \"import questionary, inspect; print\\(inspect.signature\\(questionary.select\\)\\)\")"
     ]
   }
 }
