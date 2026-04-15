@@ -174,9 +174,10 @@ def _header_panel(data: dict) -> Panel:
 
 def _services_panel(data: dict) -> Panel:
     services = data["services"]
+    target   = data["session"].get("target_ip") or data["session"].get("target_host") or "<target>"
 
     if not services:
-        body = Text("\n  No services yet.\n  Run: nmap -sV <target>", style="dim")
+        body = Text.from_markup(f"\n  No services yet.\n  Run: [bold]nmap -sV {target}[/]")
         return Panel(body, title="[bold #F59E0B]Services[/]", border_style="#F59E0B",
                      box=box.ROUNDED)
 
@@ -215,19 +216,19 @@ def _services_panel(data: dict) -> Panel:
 
 
 def _web_panel(data: dict) -> Panel:
-    web = data["web"]
+    web    = data["web"]
+    target = data["session"].get("target_ip") or data["session"].get("target_host") or "<target>"
 
     if not web:
-        body = Text(
-            "\n  No web findings yet.\n"
-            "  Run: gobuster dir -u http://<target>\n"
-            "       ffuf -u http://<target>/FUZZ",
-            style="dim",
+        body = Text.from_markup(
+            f"\n  No web findings yet.\n"
+            f"  Run: [bold]gobuster dir -u http://{target}[/]\n"
+            f"       [bold]ffuf -u http://{target}/FUZZ[/]"
         )
-        return Panel(body, title="[bold magenta]Web Findings[/]",
-                     border_style="magenta", box=box.ROUNDED)
+        return Panel(body, title="[bold #60A5FA]Web Findings[/]",
+                     border_style="#60A5FA", box=box.ROUNDED)
 
-    t = Table(box=None, show_header=True, header_style="bold magenta",
+    t = Table(box=None, show_header=True, header_style="bold #60A5FA",
               padding=(0, 1), expand=True)
     t.add_column("Code",     width=5,  no_wrap=True)
     t.add_column("Endpoint", ratio=1)
@@ -253,8 +254,8 @@ def _web_panel(data: dict) -> Panel:
 
     return Panel(
         t,
-        title=f"[bold magenta]Web Findings[/] [dim]({len(web)})[/]",
-        border_style="magenta",
+        title=f"[bold #60A5FA]Web Findings[/] [dim]({len(web)})[/]",
+        border_style="#60A5FA",
         box=box.ROUNDED,
     )
 
@@ -326,13 +327,12 @@ def _notes_panel(data: dict) -> Panel:
     total_cnt = data.get("note_count", 0)
 
     if not notes:
-        body = Text(
+        body = Text.from_markup(
             "\n  No notes yet.\n"
-            "  Add one: [bold]ctf note \"your observation\"[/]",
-            style="dim",
+            "  Add one: [bold]ctf note \"your observation\"[/]"
         )
-        return Panel(body, title="[bold blue]Notes[/]",
-                     border_style="blue", box=box.ROUNDED)
+        return Panel(body, title="[bold #60A5FA]Notes[/]",
+                     border_style="#60A5FA", box=box.ROUNDED)
 
     parts: list = []
     for i, n in enumerate(notes):
@@ -343,10 +343,10 @@ def _notes_panel(data: dict) -> Panel:
 
         header = Text()
         header.append(f"{pin_icon}", style="yellow")
-        header.append(f"#{n['id']}  ", style=f"bold blue")
+        header.append(f"#{n['id']}  ", style="bold #60A5FA")
         header.append(ts, style="dim")
         if tags:
-            header.append(f"  [{tags}]", style="dim blue")
+            header.append(f"  [{tags}]", style="dim #60A5FA")
 
         # Wrap note text to ~52 chars per line
         words, line, wrapped = text.split(), "", []
@@ -375,8 +375,8 @@ def _notes_panel(data: dict) -> Panel:
     title_suffix = f" [dim](+{total_cnt - len(notes)} more)[/]" if total_cnt > len(notes) else ""
     return Panel(
         Group(*parts),
-        title=f"[bold blue]Notes[/] [dim]({total_cnt})[/]{title_suffix}",
-        border_style="blue",
+        title=f"[bold #60A5FA]Notes[/] [dim]({total_cnt})[/]{title_suffix}",
+        border_style="#60A5FA",
         box=box.ROUNDED,
     )
 
@@ -401,7 +401,7 @@ def _footer_panel(data: dict) -> Panel:
         f"[dim]|[/]   Creds: [bold]{cred_cnt}[/]   "
         f"[dim]|[/]   Flags: [bold green]{flag_cnt}[/]   "
         f"[dim]|[/]   Hints: [bold]{hint_cnt}[/]   "
-        f"[dim]|[/]   Notes: [bold blue]{note_cnt}[/]   "
+        f"[dim]|[/]   Notes: [bold #60A5FA]{note_cnt}[/]   "
         f"[dim]|[/]   [dim]{now}[/]"
     ))
 

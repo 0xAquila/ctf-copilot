@@ -38,7 +38,8 @@ from ctf_copilot.engine.ai import generate_hint
 from ctf_copilot.engine.pattern import run_pattern_engine
 from ctf_copilot.engine.hints import save_hint, is_duplicate
 from ctf_copilot.core.context import build_context
-from ctf_copilot.interface.display import show_hint, show_skip_reason, show_parse_result, show_flag_alert
+from ctf_copilot.core.config import config as _cfg
+from ctf_copilot.interface.display import show_hint, show_skip_reason, show_parse_result, show_flag_alert, show_generating
 
 # Flag detection regex patterns — alert immediately on capture
 import re
@@ -270,6 +271,7 @@ def wrap_cmd(tool, tool_args):
     # Pattern engine — runs first (offline, zero latency, zero cost).
     # High-confidence matches suppress the AI call to save API credits.
     high_confidence_pattern_fired = False
+    _target_ip = (session.target_ip or session.target_host or "") if session else ""
     if session and output:
         try:
             ctx = build_context(session.id)
@@ -280,19 +282,24 @@ def wrap_cmd(tool, tool_args):
                     max_results=3,
                 )
                 for match in pattern_matches:
+                    # Substitute <target> placeholder with actual target IP/host
+                    hint_text = match.hint
+                    if _target_ip:
+                        hint_text = hint_text.replace("<target>", _target_ip)
+
                     # Dedup: skip if we've shown a near-identical hint before
-                    if is_duplicate(session.id, match.hint):
+                    if is_duplicate(session.id, hint_text):
                         continue
                     save_hint(
                         session_id=session.id,
-                        hint_text=match.hint,
+                        hint_text=hint_text,
                         source="pattern",
                         confidence=match.confidence,
                         command_id=cmd_id,
                         rule_name=match.rule_id,
                     )
                     show_hint(
-                        hint_text=match.hint,
+                        hint_text=hint_text,
                         source="pattern",
                         confidence=match.confidence,
                         tool=canonical_tool,
@@ -307,6 +314,7 @@ def wrap_cmd(tool, tool_args):
     # This preserves API credits for cases where offline rules are sufficient.
     if session and output and not high_confidence_pattern_fired:
         try:
+            show_generating(backend=_cfg.ai_backend)
             hint = generate_hint(
                 session_id=session.id,
                 trigger_command=full_command,

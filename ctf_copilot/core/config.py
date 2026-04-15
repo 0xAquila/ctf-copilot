@@ -120,7 +120,7 @@ def load_config() -> Config:
 def install_hooks() -> None:
     """
     Write the shell hook files to ~/.ctf_copilot/ so the user can source them.
-    Safe to call on every startup — skips files that already exist.
+    Always overwrites hook files to ensure the latest version is installed.
     """
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -143,12 +143,12 @@ _ctf_precmd() {
     [[ -z "$_CTF_LAST_CMD" ]]          && return
     [[ "$_CTF_LAST_CMD" == "ctf"* ]]   && return
     [[ "$_CTF_LAST_CMD" == "_ctf_"* ]] && return
-    ctf-log \\
+    (set +m; ctf-log \\
         --command   "$_CTF_LAST_CMD" \\
         --exit-code "$exit_code"     \\
         --cwd       "$PWD"           \\
         --timestamp "$_CTF_LAST_CMD_TS" \\
-        2>/dev/null &
+        2>/dev/null &)
     _CTF_LAST_CMD=""
 }
 
@@ -177,12 +177,12 @@ _ctf_precmd() {
     [[ -z "$_CTF_LAST_CMD" ]]          && return
     [[ "$_CTF_LAST_CMD" == "ctf"* ]]   && return
     [[ "$_CTF_LAST_CMD" == "_ctf_"* ]] && return
-    ctf-log \\
+    (setopt NO_MONITOR 2>/dev/null; ctf-log \\
         --command   "$_CTF_LAST_CMD" \\
         --exit-code "$exit_code"     \\
         --cwd       "$PWD"           \\
         --timestamp "$_CTF_LAST_CMD_TS" \\
-        2>/dev/null &
+        2>/dev/null &)
     _CTF_LAST_CMD=""
 }
 
@@ -235,13 +235,12 @@ echo "[CTF Copilot] ✓ Shell hooks active — tools are now being tracked."
     }
     for filename, content in hooks.items():
         dest = _CONFIG_DIR / filename
-        if not dest.exists():
-            dest.write_text(content)
-            try:
-                import os
-                os.chmod(dest, 0o755)
-            except OSError:
-                pass
+        dest.write_text(content, encoding="utf-8")
+        try:
+            import os
+            os.chmod(dest, 0o755)
+        except OSError:
+            pass
 
 
 def write_default_config() -> None:

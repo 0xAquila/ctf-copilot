@@ -116,9 +116,15 @@ def show_skip_reason(reason: str, verbose: bool = False) -> None:
 
 def show_parse_result(tool: str, summary: str) -> None:
     """Print a brief parse confirmation after a tool run."""
-    _console.print(
-        f"[dim][Copilot] {tool}: {summary}[/]"
-    )
+    _console.print()
+    _console.print()
+    _console.print(f"[dim][Copilot] {tool}: {summary}[/]")
+
+
+def show_generating(backend: str = "ai") -> None:
+    """Print a 'generating hint' notice before an AI API call."""
+    label = {"groq": "Groq", "ollama": "Ollama"}.get(backend, "Copilot")
+    _console.print(f"[dim][{label}] Generating hint…[/]")
 
 
 def show_flag_alert(flag: str) -> None:

@@ -247,10 +247,27 @@ def _action_start_session() -> None:
         _pause()
         return
 
+    target = s.target_ip or s.target_host or "<target>"
+
     _console.print()
     _ok(f"Session [bold {BRAND}]{s.name}[/] started!")
     _console.print()
     _show_hook_reminder()
+    _console.print()
+    _console.print(Panel(
+        Text.from_markup(
+            f"  Run these to start — Copilot tracks them automatically:\n\n"
+            f"  [bold {OK}]nmap -sV -sC -oN nmap_{s.name}.txt {target}[/]\n"
+            f"  [bold {OK}]gobuster dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt[/]\n"
+            f"  [bold {OK}]ffuf -u http://{target}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt[/]\n\n"
+            f"  [{DIM}]Hints appear automatically after each tool run.[/]"
+        ),
+        title=f"[bold {BRAND}]Recommended First Steps[/]",
+        border_style=BRAND,
+        box=box.ROUNDED,
+        expand=False,
+        padding=(0, 1),
+    ))
     _pause()
 
 
@@ -289,9 +306,25 @@ def _action_resume_session() -> None:
         return
     try:
         s = resume_session(name)
+        target = s.target_ip or s.target_host or "<target>"
         _ok(f"Session [bold {BRAND}]{s.name}[/] resumed.")
         _console.print()
         _show_hook_reminder()
+        _console.print()
+        _console.print(Panel(
+            Text.from_markup(
+                f"  Continue enumeration — Copilot tracks these automatically:\n\n"
+                f"  [bold {OK}]nmap -sV -sC -oN nmap_{s.name}.txt {target}[/]\n"
+                f"  [bold {OK}]gobuster dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt[/]\n"
+                f"  [bold {OK}]ffuf -u http://{target}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt[/]\n\n"
+                f"  [{DIM}]Hints appear automatically after each tool run.[/]"
+            ),
+            title=f"[bold {BRAND}]Recommended Commands[/]",
+            border_style=BRAND,
+            box=box.ROUNDED,
+            expand=False,
+            padding=(0, 1),
+        ))
         _pause()
     except ValueError as exc:
         _err(str(exc))
@@ -396,9 +429,24 @@ def _action_manage_sessions() -> None:
         if action == "resume":
             try:
                 s = resume_session(sname)
+                target = s.target_ip or s.target_host or "<target>"
                 _ok(f"Session [bold {BRAND}]{s.name}[/] resumed.")
                 _console.print()
                 _show_hook_reminder()
+                _console.print()
+                _console.print(Panel(
+                    Text.from_markup(
+                        f"  Continue enumeration — Copilot tracks these automatically:\n\n"
+                        f"  [bold {OK}]nmap -sV -sC -oN nmap_{s.name}.txt {target}[/]\n"
+                        f"  [bold {OK}]gobuster dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt[/]\n\n"
+                        f"  [{DIM}]Hints appear automatically after each tool run.[/]"
+                    ),
+                    title=f"[bold {BRAND}]Recommended Commands[/]",
+                    border_style=BRAND,
+                    box=box.ROUNDED,
+                    expand=False,
+                    padding=(0, 1),
+                ))
                 _pause()
             except ValueError as exc:
                 _err(str(exc))
@@ -852,13 +900,20 @@ def _action_edit_config() -> None:
 
 def _show_hook_reminder() -> None:
     _console.print(Panel(
-        f"  Activate command logging in your shell:\n\n"
-        f"  [bold {ACCENT}]source ~/.ctf_copilot/ctf-init.sh[/]\n\n"
-        f"  [{DIM}]Add to ~/.bashrc to make it permanent.[/]",
-        title=f"[{ACCENT}]Shell Hook[/]",
+        Text.from_markup(
+            f"  [bold]Step 1[/bold]  Activate in this terminal (one-time, current session only):\n"
+            f"  [bold {ACCENT}]source ~/.ctf_copilot/ctf-init.sh[/]\n\n"
+            f"  [bold]Step 2[/bold]  Make it permanent in every future terminal:\n"
+            f"  [bold {ACCENT}]echo 'source ~/.ctf_copilot/ctf-init.sh' >> ~/.bashrc[/]\n"
+            f"  [{DIM}]For Zsh: use ~/.zshrc instead of ~/.bashrc[/]\n\n"
+            f"  [{DIM}]⚠  The source command only activates tool tracking in the terminal\n"
+            f"     where you run it — new terminals need it again unless Step 2 is done.[/]"
+        ),
+        title=f"[bold {ACCENT}]Shell Hook — Required for Tool Tracking[/]",
         border_style=ACCENT,
         box=box.ROUNDED,
         expand=False,
+        padding=(0, 1),
     ))
 
 
