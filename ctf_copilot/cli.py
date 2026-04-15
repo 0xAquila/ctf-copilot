@@ -88,12 +88,40 @@ def _print_session_panel(session) -> None:
 # ---------------------------------------------------------------------------
 
 @click.group()
-def cli():
+@click.pass_context
+def cli(ctx):
     """CTF Copilot — your AI-assisted penetration testing companion.\n
     Start a session, run your tools as usual, and get real-time hints.
     """
     write_default_config()
     init_db()
+
+    # First-run nudge: show once when no key is configured for the active backend
+    # (skip for `ctf setup` itself so the wizard isn't double-prompted)
+    if ctx.invoked_subcommand != "setup":
+        backend = config.ai_backend
+        missing = False
+        if backend == "claude" and not config.api_key:
+            missing = True
+        elif backend == "groq" and not config.groq_api_key:
+            missing = True
+
+        if missing and not config.offline_mode:
+            console.print(
+                f"\n  [dim]No API key configured for [bold]{backend}[/] backend. "
+                "Run [bold cyan]ctf setup[/] to get started.[/]\n"
+            )
+
+
+# ---------------------------------------------------------------------------
+# ctf setup
+# ---------------------------------------------------------------------------
+
+@cli.command("setup")
+def setup():
+    """Interactive wizard to configure your AI provider (Claude, Groq, Ollama)."""
+    from ctf_copilot.interface.setup_wizard import run_setup_wizard
+    run_setup_wizard()
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +226,67 @@ def done():
 @cli.command()
 def status():
     """Show the current active session details."""
+    from ctf_copilot.core.database import get_connection as _gc
+    from ctf_copilot.core.notes import note_count as _note_count
+
     session = get_current_session()
     if not session:
-        console.print(
-            "[yellow]No active session.[/]\n"
-            "  Start one with: [bold]ctf start <name>[/]"
-        )
+        console.print(Panel(
+            "\n  No active session.\n\n"
+            "  [bold]ctf start <name> --ip <target>[/]   — start a new session\n"
+            "  [bold]ctf sessions[/]                     — list saved sessions\n"
+            "  [bold]ctf resume <name>[/]                — resume a paused session\n",
+            title="[bold yellow]No Active Session[/]",
+            border_style="yellow",
+            box=box.ROUNDED,
+            expand=False,
+        ))
         sys.exit(0)
+
+    # Fetch session stats
+    with _gc() as conn:
+        svc_cnt  = conn.execute("SELECT COUNT(*) AS n FROM services  WHERE session_id=?", (session.id,)).fetchone()["n"]
+        web_cnt  = conn.execute("SELECT COUNT(*) AS n FROM web_findings WHERE session_id=?", (session.id,)).fetchone()["n"]
+        cmd_cnt  = conn.execute("SELECT COUNT(*) AS n FROM commands   WHERE session_id=?", (session.id,)).fetchone()["n"]
+        hint_cnt = conn.execute("SELECT COUNT(*) AS n FROM hints      WHERE session_id=?", (session.id,)).fetchone()["n"]
+        cred_cnt = conn.execute("SELECT COUNT(*) AS n FROM credentials WHERE session_id=?", (session.id,)).fetchone()["n"]
+        flag_cnt = conn.execute("SELECT COUNT(*) AS n FROM flags      WHERE session_id=?", (session.id,)).fetchone()["n"]
+    n_cnt = _note_count(session.id)
+
+    status_icon = {"active": "🟢", "paused": "🟡", "completed": "✅"}.get(session.status, "⬜")
+
+    lines = [
+        f"  {status_icon}  [bold white]{session.name}[/]   {_status_badge(session.status)}",
+        "",
+        f"  [bold dim]Target:[/]      [cyan]{session.target_ip or session.target_host or '—'}[/]"
+        + (f"  [dim]({session.target_host})[/]" if session.target_ip and session.target_host else ""),
+        f"  [bold dim]Platform:[/]    {session.platform or '—'}",
+        f"  [bold dim]Difficulty:[/]  {session.difficulty or '—'}",
+        f"  [bold dim]OS Guess:[/]    {session.os_guess or '—'}",
+        f"  [bold dim]Started:[/]     {(session.started_at or '')[:16].replace('T', ' ')}",
+        "",
+        "  ──────────────── Intel ─────────────────",
+        f"  Services [yellow]{svc_cnt:>4}[/]    Web findings [magenta]{web_cnt:>4}[/]",
+        f"  Commands  [dim]{cmd_cnt:>4}[/]    AI hints      [cyan]{hint_cnt:>4}[/]",
+        f"  Creds     [dim]{cred_cnt:>4}[/]    Notes         [blue]{n_cnt:>4}[/]",
+        f"  Flags   [bold green]{flag_cnt:>6}[/]",
+    ]
+    if session.notes:
+        lines += ["", f"  [bold dim]Notes:[/]  [dim]{session.notes[:80]}[/]"]
+
     console.print()
-    _print_session_panel(session)
-    console.print()
+    console.print(Panel(
+        "\n".join(lines),
+        title="[bold cyan]Active Session[/]",
+        border_style="cyan",
+        box=box.DOUBLE_EDGE,
+        expand=False,
+    ))
+    console.print(
+        f"\n  [dim]Dashboard:[/] [bold]ctf dashboard[/]   "
+        f"[dim]Notes:[/] [bold]ctf notes[/]   "
+        f"[dim]Hint:[/] [bold]ctf hint[/]\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,37 +295,117 @@ def status():
 
 @cli.command("sessions")
 def sessions_list():
-    """List all sessions (all statuses)."""
+    """List all CTF sessions with stats."""
+    from ctf_copilot.core.database import get_connection as _gc
+
     sessions = list_sessions()
     if not sessions:
-        console.print("[yellow]No sessions found.[/] Start one with: [bold]ctf start <name>[/]")
+        console.print(Panel(
+            "\n  No sessions yet.\n\n"
+            "  Start your first session:\n"
+            "  [bold cyan]ctf start <machine-name> --ip <target-ip>[/]\n",
+            title="[bold cyan]CTF Sessions[/]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            expand=False,
+        ))
         return
 
-    current = get_current_session()
+    current    = get_current_session()
     current_id = current.id if current else None
+
+    # Fetch stats per session in one query
+    session_ids = [s.id for s in sessions]
+    with _gc() as conn:
+        stats_rows = conn.execute(
+            f"""
+            SELECT session_id,
+                   COUNT(DISTINCT c.id)   AS cmd_count,
+                   COUNT(DISTINCT sv.id)  AS svc_count,
+                   COUNT(DISTINCT h.id)   AS hint_count,
+                   COUNT(DISTINCT n.id)   AS note_count,
+                   COUNT(DISTINCT f.id)   AS flag_count
+            FROM sessions s
+            LEFT JOIN commands c     ON c.session_id = s.id
+            LEFT JOIN services sv    ON sv.session_id = s.id
+            LEFT JOIN hints h        ON h.session_id = s.id
+            LEFT JOIN session_notes n ON n.session_id = s.id
+            LEFT JOIN flags f        ON f.session_id = s.id
+            WHERE s.id IN ({','.join('?' for _ in session_ids)})
+            GROUP BY s.id
+            """,
+            session_ids,
+        ).fetchall()
+    stats = {r["session_id"]: dict(r) for r in stats_rows}
+
+    _PLATFORM_ICON = {
+        "hackthebox": "🟢", "htb": "🟢",
+        "tryhackme": "🔴",  "thm": "🔴",
+        "ctf": "🏆",
+        "vulnhub": "🔷",
+    }
+    _DIFF_COLOR = {
+        "easy":   "green",
+        "medium": "yellow",
+        "hard":   "red",
+        "insane": "bold red",
+    }
 
     table = Table(
         box=box.ROUNDED,
         show_header=True,
         header_style="bold cyan",
-        title="[bold]CTF Sessions[/]",
+        title="[bold cyan]CTF Sessions[/]",
+        title_justify="left",
+        caption=f"[dim]{len(sessions)} session(s)  •  ctf start <name> to begin[/]",
+        caption_justify="right",
+        padding=(0, 1),
     )
-    table.add_column("ID",         style="dim",   width=4)
-    table.add_column("Name",       style="bold",  min_width=16)
-    table.add_column("Status",                    min_width=12)
-    table.add_column("Target",                    min_width=16)
-    table.add_column("Platform",                  min_width=12)
-    table.add_column("Started",                   min_width=20)
+    table.add_column("",          width=2,  no_wrap=True)   # current marker
+    table.add_column("Name",      style="bold white", min_width=18)
+    table.add_column("Status",    min_width=10)
+    table.add_column("Target",    style="cyan",        min_width=14)
+    table.add_column("Platform",  min_width=12)
+    table.add_column("Diff",      width=8)
+    table.add_column("Cmds",      style="dim",   width=5,  justify="right")
+    table.add_column("Svcs",      style="yellow",width=5,  justify="right")
+    table.add_column("Hints",     style="cyan",  width=6,  justify="right")
+    table.add_column("Notes",     style="blue",  width=6,  justify="right")
+    table.add_column("Flags",     style="green", width=6,  justify="right")
+    table.add_column("Started",   style="dim",   min_width=11)
 
     for s in sessions:
-        marker = " <" if s.id == current_id else ""
+        is_active = (s.id == current_id)
+        marker    = "[bold green]▶[/]" if is_active else " "
+
+        plat_key  = (s.platform or "").lower()
+        plat_icon = _PLATFORM_ICON.get(plat_key, "⬜")
+        plat_str  = f"{plat_icon} {s.platform}" if s.platform else "—"
+
+        diff_key  = (s.difficulty or "").lower()
+        diff_col  = _DIFF_COLOR.get(diff_key, "white")
+        diff_str  = f"[{diff_col}]{s.difficulty}[/]" if s.difficulty else "—"
+
+        target    = s.target_ip or s.target_host or "—"
+        date_str  = (s.started_at or "")[:10]
+
+        st = stats.get(s.id, {})
+        flags_val = st.get("flag_count", 0)
+        flag_disp = f"[bold green]{flags_val}[/]" if flags_val else str(flags_val)
+
         table.add_row(
-            str(s.id),
-            s.name + marker,
+            marker,
+            s.name,
             _status_badge(s.status),
-            s.target_ip or s.target_host or "—",
-            s.platform or "—",
-            s.started_at,
+            target,
+            plat_str,
+            diff_str,
+            str(st.get("cmd_count", 0)),
+            str(st.get("svc_count", 0)),
+            str(st.get("hint_count", 0)),
+            str(st.get("note_count", 0)),
+            flag_disp,
+            date_str,
         )
 
     console.print()
@@ -301,29 +460,362 @@ def show_config():
     table.add_column("Key",   style="bold cyan")
     table.add_column("Value", style="white")
 
-    masked_key = ("*" * 8 + config.api_key[-4:]) if len(config.api_key) > 4 else "(not set)"
-    masked_nvd = ("*" * 4 + config.nvd_api_key[-4:]) if len(config.nvd_api_key) > 4 else ("(set)" if config.nvd_api_key else "(not set)")
-    masked_htb = ("*" * 4 + config.htb_api_key[-4:]) if len(config.htb_api_key) > 4 else ("(set)" if config.htb_api_key else "(not set)")
+    def _mask(key: str, prefix_len: int = 8) -> str:
+        return ("*" * prefix_len + key[-4:]) if len(key) > 4 else ("(set)" if key else "(not set)")
+
+    masked_key  = _mask(config.api_key)
+    masked_groq = _mask(config.groq_api_key)
+    masked_nvd  = _mask(config.nvd_api_key, 4)
+    masked_htb  = _mask(config.htb_api_key, 4)
+
+    # Backend badge
+    _backend_color = {"claude": "cyan", "groq": "green", "ollama": "yellow"}.get(config.ai_backend, "dim")
+    backend_display = f"[bold {_backend_color}]{config.ai_backend}[/]"
+
+    table.add_row("ai_backend",            backend_display)
+    table.add_row("", "")   # spacer
+
+    table.add_row("[dim]── Claude ──[/]",  "")
     table.add_row("api_key",               masked_key)
     table.add_row("ai_model",              config.ai_model)
+
+    table.add_row("", "")
+    table.add_row("[dim]── Groq ──[/]",    "")
+    table.add_row("groq_api_key",          masked_groq)
+    table.add_row("groq_model",            config.groq_model)
+
+    table.add_row("", "")
+    table.add_row("[dim]── Ollama ──[/]",  "")
+    table.add_row("ollama_endpoint",       config.ollama_endpoint)
+    table.add_row("ollama_model",          config.ollama_model)
+
+    table.add_row("", "")
+    table.add_row("[dim]── General ──[/]", "")
     table.add_row("ai_max_tokens",         str(config.ai_max_tokens))
     table.add_row("ai_rate_limit_seconds", str(config.ai_rate_limit_seconds))
-    table.add_row("ai_backend",            config.ai_backend)
-    if config.ai_backend == "ollama":
-        table.add_row("ollama_endpoint",   config.ollama_endpoint)
-        table.add_row("ollama_model",      config.ollama_model)
     table.add_row("hint_mode",             config.hint_mode)
     table.add_row("offline_mode",          str(config.offline_mode))
     table.add_row("confidence_threshold",  str(config.confidence_threshold))
     table.add_row("dedup_hints",           str(config.dedup_hints))
     table.add_row("nvd_api_key",           masked_nvd)
     table.add_row("htb_api_key",           masked_htb)
-    table.add_row("db_path",              config.db_path or "(default)")
+    table.add_row("db_path",               config.db_path or "(default)")
+
+    from ctf_copilot.core.keyring import keyring_exists, keyring_path
+    enc_status = (
+        f"[bold green]🔐  Enabled[/]  [dim](keyring: {keyring_path()})[/]"
+        if keyring_exists()
+        else "[yellow]⚠  Not yet active[/]  [dim](run ctf setup to configure)[/]"
+    )
 
     console.print()
-    console.print(Panel(table, title="[bold cyan]Active Configuration[/]", border_style="cyan", expand=False))
-    console.print(f"\n  Config file: [dim]~/.ctf_copilot/config.yaml[/]")
+    console.print(Panel(
+        table,
+        title="[bold cyan]Active Configuration[/]",
+        border_style="cyan",
+        expand=False,
+    ))
+    console.print(f"\n  Encryption:  {enc_status}")
+    console.print(f"  Config file: [dim]~/.ctf_copilot/config.yaml[/]")
+    console.print(f"  Reconfigure: [bold cyan]ctf setup[/]")
     console.print()
+
+
+# ---------------------------------------------------------------------------
+# ctf note  / ctf notes
+# ---------------------------------------------------------------------------
+
+@cli.command("note")
+@click.argument("text", required=False)
+@click.option("--list",   "-l", "show_list", is_flag=True,  help="List all notes for the current session")
+@click.option("--delete", "-d", "delete_id", type=int, default=None, metavar="ID", help="Delete note by ID")
+@click.option("--pin",    "-p", "pin_id",    type=int, default=None, metavar="ID", help="Toggle pin on a note")
+@click.option("--tag",    "-t", default="",  help="Comma-separated tags (e.g. web,sqli)")
+def note(text, show_list, delete_id, pin_id, tag):
+    """Add a tactical note to the current session.
+
+    Notes are shown in the dashboard and injected into AI hints so the
+    copilot knows about your observations, dead-ends, and hypotheses.
+
+    \b
+    Examples:
+      ctf note "Tried anon FTP — Access denied"
+      ctf note --tag web,sqli "SQL error on apostrophe at /login"
+      ctf note --pin 2
+      ctf note --delete 3
+      ctf note --list
+    """
+    from ctf_copilot.core.notes import (
+        add_note as _add, get_notes as _get,
+        delete_note as _del, pin_note as _pin, note_count as _cnt
+    )
+
+    session = get_current_session()
+    if not session:
+        console.print("[yellow]No active session.[/] Start one with: [bold]ctf start <name>[/]")
+        sys.exit(1)
+
+    # ── delete ────────────────────────────────────────────────────────────
+    if delete_id is not None:
+        if _del(session.id, delete_id):
+            console.print(f"  [bold green]✓[/]  Note [bold]#{delete_id}[/] deleted.")
+        else:
+            console.print(f"  [red]Note #{delete_id} not found in this session.[/]")
+        return
+
+    # ── pin toggle ────────────────────────────────────────────────────────
+    if pin_id is not None:
+        new_state = _pin(session.id, pin_id)
+        label = "📌 Pinned" if new_state else "Unpinned"
+        console.print(f"  [bold cyan]✓[/]  {label} note [bold]#{pin_id}[/].")
+        return
+
+    # ── list mode ─────────────────────────────────────────────────────────
+    if show_list or not text:
+        _print_notes(session.id)
+        return
+
+    # ── add mode ──────────────────────────────────────────────────────────
+    note_id = _add(session.id, text.strip(), tags=tag)
+    total   = _cnt(session.id)
+    console.print(
+        f"\n  [bold blue]✓[/]  Note [bold]#{note_id}[/] saved."
+        + (f"  [dim]Tags: {tag}[/]" if tag else "")
+        + f"  [dim]({total} total)[/]\n"
+        + "  [dim]It will be included in the next AI hint context.[/]\n"
+    )
+
+
+def _print_notes(session_id: int) -> None:
+    """Render a formatted notes list for a session."""
+    from ctf_copilot.core.notes import get_notes as _get
+
+    notes = _get(session_id)
+    if not notes:
+        console.print(Panel(
+            "\n  No notes yet.\n\n"
+            "  [bold]ctf note \"your observation\"[/]\n"
+            "  [bold]ctf note --tag web,sqli \"SQL error at /login\"[/]\n",
+            title="[bold blue]Session Notes[/]",
+            border_style="blue",
+            box=box.ROUNDED,
+            expand=False,
+        ))
+        return
+
+    table = Table(
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold blue",
+        title=f"[bold blue]Session Notes[/] [dim]({len(notes)})[/]",
+        expand=False,
+        padding=(0, 1),
+    )
+    table.add_column("ID",    style="bold blue",   width=4)
+    table.add_column("📌",    width=2)
+    table.add_column("Note",  style="white",        ratio=1)
+    table.add_column("Tags",  style="dim",          width=18)
+    table.add_column("Added", style="dim",          width=14, no_wrap=True)
+
+    for n in notes:
+        pin_icon = "📌" if n.get("pinned") else ""
+        ts       = (n.get("created_at") or "")[:16].replace("T", " ")[5:]
+        tags     = n.get("tags") or ""
+        table.add_row(str(n["id"]), pin_icon, n["text"], tags, ts)
+
+    console.print()
+    console.print(table)
+    console.print(
+        "\n  [dim]Delete:[/] [bold]ctf note --delete <id>[/]   "
+        "[dim]Pin:[/] [bold]ctf note --pin <id>[/]\n"
+    )
+
+
+@cli.command("notes")
+def notes_list():
+    """List all tactical notes for the current session."""
+    session = get_current_session()
+    if not session:
+        console.print("[yellow]No active session.[/] Start one with: [bold]ctf start <name>[/]")
+        sys.exit(0)
+    _print_notes(session.id)
+
+
+# ---------------------------------------------------------------------------
+# ctf vault
+# ---------------------------------------------------------------------------
+
+@cli.group("vault")
+def vault_group():
+    """Manage cross-session knowledge vaults.
+
+    Vaults are named, persistent collections of notes that live outside
+    individual CTF sessions.  Build a personal knowledge base over time:
+    'Web Techniques', 'Active Directory', 'Buffer Overflow', etc.
+
+    \b
+    Commands:
+      ctf vault                        List all vaults
+      ctf vault new "Web Techniques"   Create a vault
+      ctf vault open "Web Techniques"  Enter interactive REPL
+      ctf vault show "Web Techniques"  Display entries (non-interactive)
+      ctf vault add  "Web Techniques" "SQLi: ' OR 1=1 --"
+      ctf vault rm   "Web Techniques"  Delete a vault
+    """
+
+
+@vault_group.command("list")
+def vault_list_cmd():
+    """List all knowledge vaults."""
+    from ctf_copilot.core.vault import list_vaults as _list
+
+    vaults = _list()
+    if not vaults:
+        console.print(Panel(
+            "\n  No vaults yet.\n\n"
+            "  Create one:\n"
+            "  [bold cyan]ctf vault new \"Web Techniques\"[/]\n"
+            "  [bold cyan]ctf vault new \"Active Directory\"[/]\n",
+            title="[bold cyan]Knowledge Vaults[/]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            expand=False,
+        ))
+        return
+
+    table = Table(
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold cyan",
+        title="[bold cyan]Knowledge Vaults[/]",
+        caption="[dim]ctf vault open <name> — enter a vault[/]",
+        padding=(0, 1),
+    )
+    table.add_column("#",           style="dim",        width=4)
+    table.add_column("Vault",       style="bold white", min_width=20)
+    table.add_column("Description", style="dim",        ratio=1)
+    table.add_column("Entries",     style="cyan",       width=8,  justify="right")
+    table.add_column("Updated",     style="dim",        width=12, no_wrap=True)
+
+    for v in vaults:
+        color    = v.get("color", "cyan")
+        updated  = (v.get("updated_at") or "")[:10]
+        icon_str = f"[{color}]●[/]  {v['name']}"
+        table.add_row(
+            str(v["id"]),
+            icon_str,
+            v.get("description") or "",
+            str(v.get("entry_count", 0)),
+            updated,
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+@vault_group.command("new")
+@click.argument("name")
+@click.option("--description", "-d", default="", help="Short description")
+def vault_new(name, description):
+    """Create a new knowledge vault named NAME."""
+    from ctf_copilot.core.vault import create_vault
+
+    try:
+        v = create_vault(name, description=description)
+    except ValueError as exc:
+        console.print(f"  [bold red]Error:[/] {exc}")
+        sys.exit(1)
+
+    color = v.get("color", "cyan")
+    console.print(Panel(
+        f"\n  [{color}]●[/]  [bold]{v['name']}[/]\n"
+        + (f"  [dim]{description}[/]\n" if description else "")
+        + f"\n  Open it now:  [bold cyan]ctf vault open \"{v['name']}\"[/]\n",
+        title=f"[bold {color}]Vault Created[/]",
+        border_style=color,
+        box=box.ROUNDED,
+        expand=False,
+    ))
+
+
+@vault_group.command("open")
+@click.argument("name")
+def vault_open(name):
+    """Enter the interactive REPL for vault NAME."""
+    from ctf_copilot.core.vault import run_vault_repl
+    run_vault_repl(name)
+
+
+@vault_group.command("show")
+@click.argument("name")
+def vault_show(name):
+    """Display all entries in vault NAME (non-interactive)."""
+    from ctf_copilot.core.vault import get_vault, get_entries, _render_entries
+
+    v = get_vault(name)
+    if not v:
+        console.print(f"  [red]Vault '[bold]{name}[/]' not found.[/]")
+        sys.exit(1)
+
+    entries = get_entries(v["id"])
+    color   = v.get("color", "cyan")
+    desc    = v.get("description") or ""
+
+    console.print()
+    console.print(Panel(
+        f"  [bold {color}]📚  {v['name']}[/]"
+        + (f"\n  [dim]{desc}[/]" if desc else "")
+        + f"\n  [dim]{len(entries)} entries[/]",
+        border_style=color,
+        box=box.ROUNDED,
+        expand=False,
+    ))
+    console.print()
+    _render_entries(entries, color)
+    console.print()
+
+
+@vault_group.command("add")
+@click.argument("name")
+@click.argument("text")
+@click.option("--tag", "-t", default="", help="Comma-separated tags")
+def vault_add(name, text, tag):
+    """Quick-add an entry to vault NAME."""
+    from ctf_copilot.core.vault import get_vault, add_entry
+
+    v = get_vault(name)
+    if not v:
+        console.print(f"  [red]Vault '[bold]{name}[/]' not found.[/]")
+        sys.exit(1)
+
+    eid = add_entry(v["id"], text, tags=tag)
+    console.print(
+        f"  [bold green]✓[/]  Entry [bold]#{eid}[/] added to vault [bold]{name}[/]."
+        + (f"  [dim]Tags: {tag}[/]" if tag else "")
+    )
+
+
+@vault_group.command("rm")
+@click.argument("name")
+@click.confirmation_option(prompt="Delete this vault and all its entries?")
+def vault_rm(name):
+    """Delete vault NAME and all its entries."""
+    from ctf_copilot.core.vault import delete_vault
+
+    if delete_vault(name):
+        console.print(f"  [bold green]✓[/]  Vault [bold]{name}[/] deleted.")
+    else:
+        console.print(f"  [red]Vault '[bold]{name}[/]' not found.[/]")
+
+
+# Add `ctf vault` as an alias that shows the list when called bare
+@cli.command("vault", hidden=True)
+def vault_bare():
+    """Alias: list all knowledge vaults (same as `ctf vault list`)."""
+    from click import get_current_context
+    ctx = get_current_context()
+    ctx.invoke(vault_list_cmd)
 
 
 # ---------------------------------------------------------------------------

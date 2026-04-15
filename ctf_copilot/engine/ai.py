@@ -182,6 +182,56 @@ def _call_claude(user_message: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Groq API call (free-tier cloud LLM — OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+def _call_groq(user_message: str) -> Optional[str]:
+    """
+    Call Groq's cloud API (OpenAI-compatible endpoint).
+    Free tier available at https://console.groq.com/keys
+
+    Returns response text or None on any error.
+    """
+    import json
+    import urllib.request
+    import urllib.error
+
+    api_key = config.groq_api_key
+    if not api_key:
+        return None
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = json.dumps({
+        "model": config.groq_model,
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": user_message},
+        ],
+        "max_tokens": config.ai_max_tokens,
+        "temperature": 0.3,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            text = data["choices"][0]["message"]["content"].strip()
+            return text if text else None
+    except (urllib.error.URLError, urllib.error.HTTPError,
+            OSError, json.JSONDecodeError, KeyError, IndexError):
+        return None
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Ollama API call (local LLM backend — free, offline)
 # ---------------------------------------------------------------------------
 
@@ -228,6 +278,8 @@ def _call_ollama(user_message: str) -> Optional[str]:
 
 def _call_llm(user_message: str) -> Optional[str]:
     """Route the LLM call to the configured backend."""
+    if config.ai_backend == "groq":
+        return _call_groq(user_message)
     if config.ai_backend == "ollama":
         return _call_ollama(user_message)
     return _call_claude(user_message)
@@ -267,12 +319,19 @@ def generate_hint(
             text="", skipped=True, skip_reason="offline mode enabled"
         )
 
-    # --- API key check (only required for Claude backend) ---
-    if config.ai_backend != "ollama" and not config.api_key:
-        return HintResult(
-            text="", skipped=True,
-            skip_reason="no API key -- set api_key in ~/.ctf_copilot/config.yaml"
-        )
+    # --- API key check (not required for Ollama) ---
+    _cloud_backends = {"claude", "groq"}
+    if config.ai_backend in _cloud_backends:
+        _key = config.groq_api_key if config.ai_backend == "groq" else config.api_key
+        _cfg_field = "groq_api_key" if config.ai_backend == "groq" else "api_key"
+        if not _key:
+            return HintResult(
+                text="", skipped=True,
+                skip_reason=(
+                    f"no API key — run `ctf setup` or set {_cfg_field} "
+                    f"in ~/.ctf_copilot/config.yaml"
+                )
+            )
 
     # --- Rate limit check ---
     if not force:
@@ -317,7 +376,8 @@ def generate_hint(
 
     # --- Persist ---
     _update_rate_stamp()
-    ai_source = "ollama" if config.ai_backend == "ollama" else "ai"
+    _source_map = {"ollama": "ollama", "groq": "groq"}
+    ai_source = _source_map.get(config.ai_backend, "ai")
     save_hint(
         session_id=session_id,
         hint_text=raw_text,

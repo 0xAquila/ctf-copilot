@@ -79,6 +79,20 @@ def _fetch(session_id: int) -> dict:
             (session_id,),
         ).fetchall()
 
+        # Session notes
+        notes_rows = conn.execute(
+            "SELECT id, text, tags, pinned, created_at "
+            "FROM session_notes "
+            "WHERE session_id = ? "
+            "ORDER BY pinned DESC, created_at DESC LIMIT 8",
+            (session_id,),
+        ).fetchall()
+
+        note_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM session_notes WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+
         commands = conn.execute(
             "SELECT command, tool, timestamp FROM commands "
             "WHERE session_id = ? ORDER BY timestamp DESC LIMIT 5",
@@ -97,15 +111,17 @@ def _fetch(session_id: int) -> dict:
         ).fetchone()
 
     return {
-        "session":   dict(session) if session else {},
-        "services":  [dict(r) for r in services],
-        "web":       [dict(r) for r in web],
+        "session":    dict(session) if session else {},
+        "services":   [dict(r) for r in services],
+        "web":        [dict(r) for r in web],
         "cred_count": creds["cnt"] if creds else 0,
-        "flags":     [dict(r) for r in flags],
-        "hints":     [dict(r) for r in hints],
-        "commands":  [dict(r) for r in commands],
-        "tools":     sorted(r["tool"] for r in tool_rows if r["tool"]),
-        "cmd_count": cmd_count["cnt"] if cmd_count else 0,
+        "flags":      [dict(r) for r in flags],
+        "hints":      [dict(r) for r in hints],
+        "notes":      [dict(r) for r in notes_rows],
+        "note_count": note_count["cnt"] if note_count else 0,
+        "commands":   [dict(r) for r in commands],
+        "tools":      sorted(r["tool"] for r in tool_rows if r["tool"]),
+        "cmd_count":  cmd_count["cnt"] if cmd_count else 0,
     }
 
 
@@ -305,6 +321,66 @@ def _hints_panel(data: dict) -> Panel:
     )
 
 
+def _notes_panel(data: dict) -> Panel:
+    notes     = data.get("notes", [])
+    total_cnt = data.get("note_count", 0)
+
+    if not notes:
+        body = Text(
+            "\n  No notes yet.\n"
+            "  Add one: [bold]ctf note \"your observation\"[/]",
+            style="dim",
+        )
+        return Panel(body, title="[bold blue]Notes[/]",
+                     border_style="blue", box=box.ROUNDED)
+
+    parts: list = []
+    for i, n in enumerate(notes):
+        pin_icon  = "📌 " if n.get("pinned") else ""
+        ts        = (n.get("created_at") or "")[:16][5:].replace("T", " ")
+        text      = (n.get("text") or "").strip()
+        tags      = n.get("tags") or ""
+
+        header = Text()
+        header.append(f"{pin_icon}", style="yellow")
+        header.append(f"#{n['id']}  ", style=f"bold blue")
+        header.append(ts, style="dim")
+        if tags:
+            header.append(f"  [{tags}]", style="dim blue")
+
+        # Wrap note text to ~52 chars per line
+        words, line, wrapped = text.split(), "", []
+        for word in words:
+            if len(line) + len(word) + 1 > 52:
+                if line:
+                    wrapped.append(line)
+                line = word
+            else:
+                line = f"{line} {word}".strip()
+        if line:
+            wrapped.append(line)
+        body_text = "\n".join(wrapped[:3])
+        if len(wrapped) > 3:
+            body_text += " …"
+
+        note_block = Text()
+        note_block.append_text(header)
+        note_block.append("\n")
+        note_block.append(body_text, style="white")
+
+        parts.append(note_block)
+        if i < len(notes) - 1:
+            parts.append(Rule(style="dim"))
+
+    title_suffix = f" [dim](+{total_cnt - len(notes)} more)[/]" if total_cnt > len(notes) else ""
+    return Panel(
+        Group(*parts),
+        title=f"[bold blue]Notes[/] [dim]({total_cnt})[/]{title_suffix}",
+        border_style="blue",
+        box=box.ROUNDED,
+    )
+
+
 def _footer_panel(data: dict) -> Panel:
     tools     = data["tools"]
     cmd_count = data["cmd_count"]
@@ -316,6 +392,8 @@ def _footer_panel(data: dict) -> Panel:
     tools_str = ", ".join(f"[cyan]{t}[/]" for t in tools) if tools else "[dim]none[/]"
     now       = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
+    note_cnt  = data.get("note_count", 0)
+
     stats = Text()
     stats.append_text(Text.from_markup(
         f"Tools: {tools_str}   "
@@ -323,6 +401,7 @@ def _footer_panel(data: dict) -> Panel:
         f"[dim]|[/]   Creds: [bold]{cred_cnt}[/]   "
         f"[dim]|[/]   Flags: [bold green]{flag_cnt}[/]   "
         f"[dim]|[/]   Hints: [bold]{hint_cnt}[/]   "
+        f"[dim]|[/]   Notes: [bold blue]{note_cnt}[/]   "
         f"[dim]|[/]   [dim]{now}[/]"
     ))
 
@@ -368,12 +447,14 @@ def _build_layout(data: dict) -> Layout:
         Layout(name="services", ratio=2),
         Layout(name="web",      ratio=3),
         Layout(name="hints",    ratio=3),
+        Layout(name="notes",    ratio=2),
     )
 
     root["header"].update(_header_panel(data))
     root["services"].update(_services_panel(data))
     root["web"].update(_web_panel(data))
     root["hints"].update(_hints_panel(data))
+    root["notes"].update(_notes_panel(data))
     root["footer"].update(_footer_panel(data))
 
     return root
@@ -395,6 +476,7 @@ def render_snapshot(session_id: int) -> Group:
         _services_panel(data),
         _web_panel(data),
         _hints_panel(data),
+        _notes_panel(data),
     ], equal=True, expand=True)
     footer  = _footer_panel(data)
 

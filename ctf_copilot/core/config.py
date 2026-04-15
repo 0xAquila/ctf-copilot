@@ -25,14 +25,18 @@ _CONFIG_FILE = _CONFIG_DIR / "config.yaml"
 
 @dataclass
 class Config:
-    # AI backend — Claude (default) or local Ollama
+    # AI backend — Claude (default), Groq (free cloud), or local Ollama
     api_key: str = ""                        # Anthropic API key
     ai_model: str = "claude-sonnet-4-6"      # Claude model to use
     ai_max_tokens: int = 512                  # Max tokens per hint response
     ai_rate_limit_seconds: float = 5.0        # Min seconds between AI calls
-    ai_backend: str = "claude"               # "claude" | "ollama"
+    ai_backend: str = "claude"               # "claude" | "groq" | "ollama"
     ollama_endpoint: str = "http://localhost:11434"  # Ollama server URL
     ollama_model: str = "llama3.2"           # Ollama model to use
+
+    # Groq (free-tier cloud LLM — fast, OpenAI-compatible)
+    groq_api_key: str = ""                           # Groq API key
+    groq_model: str = "llama-3.3-70b-versatile"     # Groq model to use
 
     # Behaviour
     hint_mode: str = "cli"                    # cli | tui | notify
@@ -66,6 +70,8 @@ def _load_env() -> dict:
         "CTF_COPILOT_AI_BACKEND":           ("ai_backend", str),
         "CTF_COPILOT_OLLAMA_ENDPOINT":      ("ollama_endpoint", str),
         "CTF_COPILOT_OLLAMA_MODEL":         ("ollama_model", str),
+        "CTF_COPILOT_GROQ_API_KEY":         ("groq_api_key", str),
+        "CTF_COPILOT_GROQ_MODEL":           ("groq_model", str),
         "CTF_COPILOT_HINT_MODE":            ("hint_mode", str),
         "CTF_COPILOT_OFFLINE":              ("offline_mode", _bool),
         "CTF_COPILOT_CONFIDENCE_THRESHOLD": ("confidence_threshold", float),
@@ -83,8 +89,16 @@ def _load_env() -> dict:
 
 def load_config() -> Config:
     """Build a Config by merging defaults < YAML file < environment variables."""
+    from ctf_copilot.core.keyring import ENCRYPTED_FIELDS, decrypt
+
     data = _load_yaml()
-    data.update(_load_env())  # env vars override file
+
+    # Decrypt any encrypted fields from the YAML file
+    for field in ENCRYPTED_FIELDS:
+        if field in data and isinstance(data[field], str):
+            data[field] = decrypt(data[field])
+
+    data.update(_load_env())  # env vars override file (never encrypted in env)
 
     # Filter to only known fields
     valid_fields = Config.__dataclass_fields__.keys()
@@ -99,33 +113,42 @@ def write_default_config() -> None:
         return
     template = """\
 # CTF Copilot Configuration
-# Documentation: https://github.com/your-repo/ctf-copilot
+# Run `ctf setup` for the interactive setup wizard.
 
-# ── Claude API (default backend) ────────────────────────────────────────────
-# Anthropic API key (required when ai_backend is "claude")
-# Get yours at https://console.anthropic.com
+# ── LLM Backend ─────────────────────────────────────────────────────────────
+# "claude"  - Anthropic Claude API  (best reasoning, paid)
+# "groq"    - Groq cloud API        (free tier, very fast)
+# "ollama"  - Local Ollama model    (free, offline, private)
+ai_backend: "claude"
+
+# ── Claude API ───────────────────────────────────────────────────────────────
+# Get your key at: https://console.anthropic.com/settings/keys
 api_key: ""
 
 # Claude model to use for hints
 ai_model: "claude-sonnet-4-6"
 
+# ── Groq API (free tier) ─────────────────────────────────────────────────────
+# Get your free key at: https://console.groq.com/keys
+groq_api_key: ""
+
+# Groq model to use (free tier options):
+#   llama-3.3-70b-versatile  — best accuracy  (recommended)
+#   llama-3.1-8b-instant     — fastest
+#   mixtral-8x7b-32768       — alternative
+groq_model: "llama-3.3-70b-versatile"
+
+# ── Ollama (local) ────────────────────────────────────────────────────────────
+# Install: https://ollama.com  then: ollama pull llama3.2
+ollama_endpoint: "http://localhost:11434"
+ollama_model: "llama3.2"
+
+# ── General AI Settings ───────────────────────────────────────────────────────
 # Maximum tokens per AI hint response
 ai_max_tokens: 512
 
 # Minimum seconds between AI calls (cost/rate control)
 ai_rate_limit_seconds: 5.0
-
-# ── LLM Backend ─────────────────────────────────────────────────────────────
-# "claude"  - Use Anthropic Claude API (requires api_key above)
-# "ollama"  - Use a local Ollama model (free, offline, no API key needed)
-#             Install Ollama: https://ollama.com  then: ollama pull llama3.2
-ai_backend: "claude"
-
-# Ollama server endpoint (only used when ai_backend is "ollama")
-ollama_endpoint: "http://localhost:11434"
-
-# Ollama model to use (run `ollama list` to see installed models)
-ollama_model: "llama3.2"
 
 # ── Behaviour ────────────────────────────────────────────────────────────────
 # Hint display mode: cli | tui | notify
@@ -158,6 +181,47 @@ thm_api_key: ""
 db_path: ""
 """
     _CONFIG_FILE.write_text(template)
+
+
+def save_config_value(key: str, value: str) -> None:
+    """
+    Write a single key=value pair into the config YAML, preserving all other
+    existing keys and comments.  API key fields are automatically encrypted
+    using Fernet (AES-128) before being written to disk.
+    """
+    from ctf_copilot.core.keyring import ENCRYPTED_FIELDS, encrypt
+
+    write_default_config()          # ensure file exists
+    raw = _CONFIG_FILE.read_text(encoding="utf-8")
+
+    # Encrypt API keys before writing to disk
+    stored_value: str = value
+    if key in ENCRYPTED_FIELDS and isinstance(value, str) and value:
+        stored_value = encrypt(value)
+
+    # Replace an existing `key: "..."` or `key: ''` or `key: value` line
+    import re
+    pattern = re.compile(
+        r'^(' + re.escape(key) + r':\s*).*$',
+        re.MULTILINE,
+    )
+    # Wrap strings in double quotes; booleans/numbers are written bare
+    if isinstance(stored_value, bool):
+        replacement = rf'\g<1>{str(stored_value).lower()}'
+    elif isinstance(stored_value, (int, float)):
+        replacement = rf'\g<1>{stored_value}'
+    else:
+        escaped = stored_value.replace('"', '\\"')
+        replacement = rf'\g<1>"{escaped}"'
+
+    if pattern.search(raw):
+        new_raw = pattern.sub(replacement, raw, count=1)
+    else:
+        # Key not present — append it
+        section_value = f'"{stored_value}"' if not isinstance(stored_value, (bool, int, float)) else str(stored_value).lower()
+        new_raw = raw.rstrip("\n") + f"\n{key}: {section_value}\n"
+
+    _CONFIG_FILE.write_text(new_raw, encoding="utf-8")
 
 
 # Module-level singleton — import and use directly

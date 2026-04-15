@@ -153,6 +153,36 @@ CREATE TABLE IF NOT EXISTS hints (
     shown       INTEGER NOT NULL DEFAULT 1,
     timestamp   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Freeform tactical notes tied to a CTF session
+-- (hypotheses, dead-ends, observations the AI should know about)
+CREATE TABLE IF NOT EXISTS session_notes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    text        TEXT    NOT NULL,
+    tags        TEXT    NOT NULL DEFAULT '',   -- comma-separated tags
+    pinned      INTEGER NOT NULL DEFAULT 0,    -- 1 = pinned to top
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Named knowledge vaults (cross-session persistent memory)
+CREATE TABLE IF NOT EXISTS vaults (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    description TEXT    NOT NULL DEFAULT '',
+    color       TEXT    NOT NULL DEFAULT 'cyan',
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Individual entries within a vault
+CREATE TABLE IF NOT EXISTS vault_entries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    vault_id    INTEGER NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    text        TEXT    NOT NULL,
+    tags        TEXT    NOT NULL DEFAULT '',   -- comma-separated tags
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

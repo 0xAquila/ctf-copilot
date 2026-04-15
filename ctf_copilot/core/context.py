@@ -304,6 +304,17 @@ def format_for_ai(ctx: SessionContext, recent_command: str = "") -> str:
     if ctx.tools_used:
         lines.append(f"TOOLS USED: {', '.join(sorted(ctx.tools_used))}")
 
+    # --- Tactical notes (user's own observations, hypotheses, dead-ends) ---
+    try:
+        from ctf_copilot.core.notes import get_notes_for_ai
+        user_notes = get_notes_for_ai(ctx.session.id, limit=6)
+        if user_notes:
+            lines.append("TACTICAL NOTES (user observations — treat as high-signal context):")
+            for n in user_notes:
+                lines.append(f"  - {n}")
+    except Exception:
+        pass  # Never let notes failure break hint generation
+
     # --- Most recent action ---
     if recent_command:
         lines.append(f"LAST ACTION: {recent_command[:100]}")
