@@ -1,7 +1,7 @@
 <div align="center">
 
 # CTF Copilot
-
+![Logo](assets/banner.png)
 **A real-time AI-assisted penetration testing companion that lives in your terminal.**
 
 Run your tools as normal. CTF Copilot watches, learns, and gives you the next hint — without spoiling the challenge.

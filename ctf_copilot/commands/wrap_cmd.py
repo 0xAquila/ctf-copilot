@@ -262,13 +262,30 @@ def wrap_cmd(tool, tool_args):
     for flag in flags:
         show_flag_alert(flag)
 
+    # ── Fast path done. Fork for slow analysis so the shell prompt returns
+    # immediately. The child process writes hints to the terminal asynchronously.
+    # On platforms without os.fork (Windows), falls through and runs inline.
+    _do_slow = bool(session and output)
+    if _do_slow:
+        try:
+            _child_pid = os.fork()
+            if _child_pid != 0:
+                # ── Parent: return control to the shell immediately ──────────
+                sys.exit(exit_code)
+            # ── Child: detach and do the slow work ──────────────────────────
+            os.setsid()   # new session — won't receive SIGHUP when parent exits
+            # Brief pause so the parent exits and the shell prompt appears first
+            import time as _time
+            _time.sleep(0.3)
+        except AttributeError:
+            pass   # os.fork not available (Windows) — run synchronously below
+
     # CVE enrichment (NVD) + Searchsploit auto-query — fire after nmap parse.
-    # Both are silent on error and don't block the main flow.
     if parsed_ok and session and cmd_id and canonical_tool == "nmap":
         _run_cve_enrichment(session, cmd_id)
         _run_searchsploit_auto(session, cmd_id)
 
-    # Pattern engine — runs first (offline, zero latency, zero cost).
+    # Pattern engine — offline, zero latency, zero cost.
     # High-confidence matches suppress the AI call to save API credits.
     high_confidence_pattern_fired = False
     _target_ip = (session.target_ip or session.target_host or "") if session else ""
@@ -287,7 +304,6 @@ def wrap_cmd(tool, tool_args):
                     if _target_ip:
                         hint_text = hint_text.replace("<target>", _target_ip)
 
-                    # Dedup: skip if we've shown a near-identical hint before
                     if is_duplicate(session.id, hint_text):
                         continue
                     save_hint(
@@ -311,7 +327,6 @@ def wrap_cmd(tool, tool_args):
             pass
 
     # AI hint generation — skipped when a high-confidence pattern already fired.
-    # This preserves API credits for cases where offline rules are sufficient.
     if session and output and not high_confidence_pattern_fired:
         try:
             show_generating(backend=_cfg.ai_backend)
@@ -332,7 +347,11 @@ def wrap_cmd(tool, tool_args):
         except Exception:
             pass
 
-    sys.exit(exit_code)
+    # Child process exits cleanly; inline path exits with tool's code.
+    try:
+        os._exit(0)      # child — skip Python atexit cleanup
+    except Exception:
+        sys.exit(exit_code)
 
 
 def main():
