@@ -204,6 +204,25 @@ def list_sessions() -> list[Session]:
     return [_row_to_session(r) for r in rows]
 
 
+def delete_session(session_id: int) -> bool:
+    """
+    Permanently delete a session and all its associated data (commands,
+    services, hints, notes, flags, etc. — removed via CASCADE).
+
+    Also clears the current-session pointer if it points to this session.
+    Returns True if a row was deleted, False if not found.
+    """
+    init_db()
+    # Clear active pointer if needed
+    current = get_current_session()
+    if current and current.id == session_id:
+        _clear_current()
+
+    with get_connection() as conn:
+        cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        return cur.rowcount > 0
+
+
 def update_session(session_id: int, **kwargs) -> None:
     """
     Update arbitrary session fields.

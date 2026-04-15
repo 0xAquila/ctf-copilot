@@ -100,6 +100,17 @@ def load_config() -> Config:
 
     data.update(_load_env())  # env vars override file (never encrypted in env)
 
+    # Coerce string booleans → Python bool for bool fields.
+    # YAML stores  offline_mode: "false"  (quoted) as a truthy string;
+    # we always want a real bool so that `if config.offline_mode` is correct.
+    _bool_fields = {
+        name for name, f in Config.__dataclass_fields__.items()
+        if f.default is True or f.default is False
+    }
+    for fname in _bool_fields:
+        if fname in data and isinstance(data[fname], str):
+            data[fname] = data[fname].strip().lower() in ("true", "yes", "1")
+
     # Filter to only known fields
     valid_fields = Config.__dataclass_fields__.keys()
     filtered = {k: v for k, v in data.items() if k in valid_fields}
