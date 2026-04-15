@@ -1,0 +1,117 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+wheels/
+*.whl
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Type checking / linting caches
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+
+# ── CTF Copilot runtime data ──────────────────────────────────────────────────
+# Local DB and state — never commit (contains session data, flags, API cache)
+*.db
+*.db-wal
+*.db-shm
+
+# Rate-limit timestamp file
+last_ai_call
+
+# Generated writeups (personal session output)
+ctf_writeups/
+
+# ── Secrets & config ──────────────────────────────────────────────────────────
+# Any file that might contain API keys or sensitive config
+config.yaml
+config.local.yaml
+*.secret
+*.secrets
+secrets.json
+.secrets/
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+nosetests.xml
+test-results/
+junit.xml
+
+# ── IDE & editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.ropeproject/
+.spyderproject.cfg
+.spyproject/
+*.sublime-project
+*.sublime-workspace
+
+# ── OS generated ──────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Distribution / packaging ─────────────────────────────────────────────────
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Optional RAG dependencies (large model files) ────────────────────────────
+# chromadb local storage
+chroma_db/
+*.chroma/
+
+# sentence-transformers model cache
+.cache/
+models/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+system_design.md

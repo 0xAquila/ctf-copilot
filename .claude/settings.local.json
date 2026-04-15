@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python -m ctf_copilot.cli --help)",
+      "Bash(python -c \"from ctf_copilot.cli import cli; cli\\(['--help']\\)\")",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"from ctf_copilot.cli import cli; cli\\(\\)\" -- rules --tag rce)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "WebSearch",
+      "WebFetch(domain:registry.modelcontextprotocol.io)",
+      "WebFetch(domain:mcpservers.org)"
+    ]
+  }
+}
