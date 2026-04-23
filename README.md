@@ -12,14 +12,6 @@ Run your tools as normal. CTF Copilot watches, learns, and gives you the next hi
 [![LLM](https://img.shields.io/badge/LLM-Claude%20%7C%20Ollama-f97316?style=flat-square)](https://anthropic.com)
 [![Platform](https://img.shields.io/badge/Platform-Kali%20%7C%20Parrot%20%7C%20Linux-e11d48?style=flat-square)](https://kali.org)
 
----
-
-<!-- DEMO VIDEO PLACEHOLDER -->
-> **📹 Demo Video**
-> 
-> *[Insert a short screen recording here — recommended: 60–90 seconds showing a full recon run on an HTB box, with the live dashboard open in a split terminal. Tools: OBS + ffmpeg to gif, or record directly to MP4 and embed with a thumbnail.]*
->
-> `![Demo](assets/demo.gif)`
 
 ---
 
@@ -34,17 +26,6 @@ The result: hints that arrive automatically, timed to what you just discovered, 
 Built for HTB, TryHackMe, and real-world lab environments. Works fully offline with a local Ollama model.
 
 ---
-
-## Screenshots
-
-<!-- SCREENSHOTS PLACEHOLDER -->
-
-> **📸 Screenshots** — *Replace the placeholders below with actual screenshots. Recommended shots:*
-> - *The 5-panel live dashboard (`ctf dashboard`) with an active session*
-> - *A pattern-match hint panel appearing after an nmap run*
-> - *An NVD CVE alert after vsftpd 2.3.4 is detected*
-> - *A generated writeup open in a Markdown viewer*
-> - *The `ctf timeline` tree view*
 
 ```
 ┌────────────────────────────── CTF Copilot ───────────────────────────────────┐
